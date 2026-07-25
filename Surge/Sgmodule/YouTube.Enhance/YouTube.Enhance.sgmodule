@@ -1,0 +1,9 @@
+#!name=YouTube Enhance
+#!desc=为 YouTube & YouTube Music 启用后台播放和画中画功能
+#!system=ios
+
+[Script]
+youtube.player = type=http-response,pattern=^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/player(\?(.*))?$,requires-body=1,max-size=-1,binary-body-mode=1,script-path=youtube.js
+
+[MITM]
+hostname = %APPEND% youtubei.googleapis.com
