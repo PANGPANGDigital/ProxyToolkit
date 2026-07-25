@@ -1,6 +1,6 @@
 # YouTube Enhance
 
-为 **YouTube** 和 **YouTube Music** 启用**后台播放**和**画中画（PiP）**功能的 Surge 模块。
+为 **YouTube** 和 **YouTube Music** 启用**后台播放**和 **画中画（PiP）**功能的 Surge 模块。
 
 基于 [Maasea/sgmodule](https://github.com/Maasea/sgmodule) 的 YouTube Enhance 精简，只保留后台播放与画中画功能，去除广告拦截、字幕翻译、界面元素隐藏等其他逻辑。
 
