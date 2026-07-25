@@ -14,36 +14,33 @@
 
 ## 安装
 
-### 方式一：本地模块
+### Surge
 
-1. 将本项目克隆或下载到本地
-2. 在 Surge 的 **模块** 标签页中，点击「安装本地模块」，选择 `YouTube.Enhance.sgmodule`
-3. 确保 Surge 已开启 **HTTPS 解密（MITM）**
-4. 在 MITM 主机名中添加 `youtubei.googleapis.com`（模块会自动追加）
+在 Surge 的 **模块** 标签页中，点击「安装」，输入以下链接：
 
-### 方式二：托管远程 URL
+```
+https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/YouTube.Enhance/YouTube.Enhance.sgmodule
+```
 
-将 `Script/Youtube/youtube.js` 上传到你的托管服务器，然后将模块中的 `script-path` 改为对应的远程 URL。
+要求 Surge 已开启 **HTTPS 解密（MITM）**，`youtubei.googleapis.com` 会自动追加到 MITM 主机名列表。
 
 ## 文件结构
 
 ```
-YouTube Enhance/
+YouTube.Enhance/
 ├── README.md
 ├── YouTube.Enhance.sgmodule   # Surge 模块配置
-└── Script/
-    └── Youtube/
-        └── youtube.js          # 核心脚本（精简版）
+└── youtube.js                  # 核心脚本
 ```
 
 ## 工作原理
 
-模块通过 MITM 拦截 YouTube 的 `youtubei/v1/player` API 响应，修改 `playabilityStatus` 中的以下字段：
+模块通过 MITM 拦截 YouTube 的 `youtubei/v1/player` API 响应，解析其 protobuf 数据，修改 `playabilityStatus` 中的以下字段：
 
 - `pictureInPictureRender.pictureInPictureAbility.active = true`
 - `backgroundPlayerRender.backgroundAbility.active = true`
 
-由于 YouTube 客户端会根据这些字段决定是否允许后台播放和画中画，修改后即可解锁这两个功能。
+YouTube 客户端会根据这些字段决定是否允许后台播放和画中画，修改后即可解锁这两个功能。
 
 ## 致谢
 
