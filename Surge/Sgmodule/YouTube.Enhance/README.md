@@ -35,12 +35,24 @@ YouTube.Enhance/
 
 ## 工作原理
 
-模块通过 MITM 拦截 YouTube 的 `youtubei/v1/player` API 响应，解析其 protobuf 数据，修改 `playabilityStatus` 中的以下字段：
+模块通过 MITM 拦截 YouTube 的 `youtubei/v1/player` 和 `youtubei/v1/get_watch` API 响应，解析其 protobuf 数据，修改 `playabilityStatus` 中的以下字段：
 
 - `pictureInPictureRender.pictureInPictureAbility.active = true`
 - `backgroundPlayerRender.backgroundAbility.active = true`
 
 YouTube 客户端会根据这些字段决定是否允许后台播放和画中画，修改后即可解锁这两个功能。
+
+## 技术细节
+
+脚本基于 [protobuf-ts](https://github.com/timostamm/protobuf-ts) 解析 YouTube 的 protobuf 响应。核心处理流程：
+
+1. `Ni(l)` — 清除广告相关字段（`adPlacements`、`adSlots` 等）
+2. `Si(l)` — 设置 `playabilityStatus` 中的 PiP 和后台播放能力
+3. `Pi(l,e)` — 处理字幕轨道
+
+## 更新日志
+
+- **2026-07-25**：修复核心处理逻辑，确保 `Br()` 正确调用 `Ni()`、`Si()`、`Pi()`；简化模块配置，仅保留 `player` 和 `get_watch` 端点
 
 ## 致谢
 
