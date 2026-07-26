@@ -17,7 +17,7 @@
 在 Surge 的 **模块** 标签页中，点击「安装」，输入以下链接：
 
 ```
-https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/YouTube.Enhance/YouTube.Enhance.sgmodule
+https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/VVebo.Fix/VVebo.sgmodule
 ```
 
 要求 Surge 已开启 **HTTPS 解密（MITM）**，`youtubei.googleapis.com` 会自动追加到 MITM 主机名列表。
