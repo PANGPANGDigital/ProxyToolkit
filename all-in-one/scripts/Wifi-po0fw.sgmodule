@@ -11,8 +11,8 @@
 po0fw-slots = title="po0fw · 全部槽位", content="点击刷新查询", style=info, script-name=po0fw-slots, update-interval=60
 
 [Script]
-WiFi-模块切换 = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/scripts/wifi-module-switch.js,script-update-interval=3600,argument="{{{wifi_list}}}"
+WiFi-模块切换 = type=event,event-name=network-changed,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/all-in-one/scripts/wifi-module-switch.js,script-update-interval=3600,argument="{{{wifi_list}}}"
 
-WiFi-启动检查 = type=event,event-name=engine-started,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/scripts/wifi-module-switch.js,script-update-interval=3600,argument="{{{wifi_list}}}"
+WiFi-启动检查 = type=event,event-name=engine-started,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/all-in-one/scripts/wifi-module-switch.js,script-update-interval=3600,argument="{{{wifi_list}}}"
 
-po0fw-slots = type=generic,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/scripts/po0fw-panel.js,script-update-interval=3600,timeout=15,argument="token={{{TOKEN}}}"
+po0fw-slots = type=generic,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/all-in-one/scripts/po0fw-panel.js,script-update-interval=3600,timeout=15,argument="token={{{TOKEN}}}"
