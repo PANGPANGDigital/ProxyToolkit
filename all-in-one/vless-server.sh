@@ -45,7 +45,7 @@ if [[ ! "$SCRIPT_SOURCE_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
     exit 1
 fi
 readonly SCRIPT_SOURCE_REF
-readonly SCRIPT_SOURCE_PATH="vless-server.sh"
+readonly SCRIPT_SOURCE_PATH="all-in-one/vless-server.sh"
 readonly SCRIPT_RAW_URL="https://raw.githubusercontent.com/${SCRIPT_SOURCE_REPO}/${SCRIPT_SOURCE_REF}/${SCRIPT_SOURCE_PATH}"
 readonly CFG="/etc/vless-reality"
 readonly ACME_DEFAULT_EMAIL="acme@vaio.com"
@@ -2586,7 +2586,7 @@ _download_singbox_stats_core() {
     version=$(_singbox_stats_build_version "$version") || return 1
     [[ "$arch" == amd64 || "$arch" == arm64 ]] || { _err "无此架构预编译包，请在本地从官方源码编译带 with_v2ray_api 的核心"; return 1; }
     libc=$(_singbox_stats_libc) || { _err "无法识别 libc，请手动确认或本地编译统计核心"; return 1; }
-    base="base="https://raw.githubusercontent.com/PANGPANGDigital/AIO-Copy/singbox-stats-binaries/v${version}/linux-${arch}-${libc}""
+    "base="https://raw.githubusercontent.com/PANGPANGDigital/AIO-Copy/singbox-stats-binaries/v${version}/linux-${arch}-${libc}"
     if ! curl -fsSL --connect-timeout 15 --max-time 60 "$base/manifest.json" -o "$work/manifest.json"; then
         _err "无法下载 v$version linux/$arch/$libc 统计包。请检查网络；若无对应包，可本地编译带 with_v2ray_api 的核心（需充足内存/磁盘），不会自动编译。原核心保留。"
         return 1
