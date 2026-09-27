@@ -39,7 +39,7 @@
 ### 安装脚本
 
 ```bash
-wget -O vless-server.sh https://raw.githubusercontent.com/Chil30/vless-all-in-one/main/vless-server.sh && bash vless-server.sh
+wget -O vless-server.sh https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/all-in-one/vless-server.sh && chmod +x vless-server.sh && ./vless-server.sh
 ```
 
 ### 运行脚本
