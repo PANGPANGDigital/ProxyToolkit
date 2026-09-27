@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.3] - 2026-09
+
+**Fixed**
+
+- 修复 Snell v4/v5/v6 多端口卸载时，选择单个端口却删除全部实例的问题。 [@mozisen](https://github.com/mozisen/surge)
+- 已管理的 Snell 实例只删除所选端口及对应用户、服务、配置和防火墙计数规则；其他端口及用户的流量、TG 绑定保持不变。 [@mozisen](https://github.com/mozisen/surge)
+- 完成后显示剩余实例数量；仅明确选择“卸载所有端口”时才删除全部实例。 [@mozisen](https://github.com/mozisen/surge)
+- 无效端口或异常记录拒绝删除；旧版未迁移的多端口记录阻止单端口卸载，避免误删。 [@mozisen](https://github.com/mozisen/surge)
+
 ## [3.5.3] - 2026-07-22
 
 **Fixed**
