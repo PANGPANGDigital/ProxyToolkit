@@ -4,13 +4,12 @@
 
 ## 安装为 Surge 本地模块
 
-把以下三个文件复制到 Surge 的 Profile 目录中（放在同一层）：
+在 Surge 的 **模块** 标签页中，点击「安装」，输入以下链接：
 
-- `Spotify.sgmodule`
-- `spotify-json.js`
-- `spotify-proto.js`
+```
+https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/Spotify/Spotify.sgmodule
+```
 
-然后在 Surge 的模块列表中启用 `Spotify (local snapshot)`。模块使用相对 Profile 目录的本地脚本路径。Surge 文档说明本地模块是放在 Profile 目录中的 `.sgmodule` 文件，脚本路径支持相对 Profile 目录的本地路径：<https://manual.nssurge.com/profile/module.html> 和 <https://manual.nssurge.com/scripting/overview.html>。
 
 需要已在 Surge 中安装并启用 MITM 证书；该模块会为 Spotify 客户端域名追加 MITM 主机名。原模块注明系统版本需 iOS 15 或以上。具体效果会受 Surge/Spotify 版本和 Spotify 服务端改动影响。
 
