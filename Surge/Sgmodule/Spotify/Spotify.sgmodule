@@ -1,0 +1,27 @@
+#!name=Spotify (local snapshot)
+#!desc=本地快照；iOS 15+；含9条候选域名拦截规则，不保证去除全部广告。
+# Upstream snapshot: app2smile/rules @ df6366a7024e0b3f0aa3510c5b791eea6f3cba89
+# 功能: 1.去除播放广告 2.歌手/专辑列表正常展示 3.去除随机播放
+
+[Rule]
+# 候选广告/统计主机：精确域名拦截；不保证能拦截广告内容
+DOMAIN,aet.spotify.com,REJECT
+DOMAIN,adeventtracker.spotify.com,REJECT
+DOMAIN,ads-fa.spotify.com,REJECT
+DOMAIN,ads-akp.spotify.com,REJECT
+DOMAIN,audio-ads.spotify.com,REJECT
+DOMAIN,analytics.spotify.com,REJECT
+DOMAIN,metrics.spotify.com,REJECT
+DOMAIN,crashdump.spotify.com,REJECT
+DOMAIN,log.spotify.com,REJECT
+
+[Header Rewrite]
+# if-none-match返回304状态码
+http-request ^https:\/\/(spclient\.wg\.spotify\.com|.*-spclient\.spotify\.com(:443)?)\/user-customization-service\/v1\/customize$ header-del if-none-match
+
+[MITM]
+hostname = %APPEND% spclient.wg.spotify.com, *spclient.spotify.com
+
+[Script]
+spotify-json = type=http-request,pattern=^https:\/\/(spclient\.wg\.spotify\.com|.*-spclient\.spotify\.com(:443)?)\/(artistview\/v1\/artist|album-entity-view\/v2\/album)\/,requires-body=0,script-path=spotify-json.js
+spotify-proto = type=http-response,pattern=^https:\/\/(spclient\.wg\.spotify\.com|.*-spclient\.spotify\.com(:443)?)\/(bootstrap\/v1\/bootstrap|user-customization-service\/v1\/customize)$,requires-body=1,binary-body-mode=1,max-size=0,script-path=spotify-proto.js,script-update-interval=0
