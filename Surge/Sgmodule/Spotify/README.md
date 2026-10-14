@@ -14,6 +14,8 @@
 
 需要已在 Surge 中安装并启用 MITM 证书；该模块会为 Spotify 客户端域名追加 MITM 主机名。原模块注明系统版本需 iOS 15 或以上。具体效果会受 Surge/Spotify 版本和 Spotify 服务端改动影响。
 
+二进制 Protobuf 响应脚本最多处理 1 MiB；超过该大小时 Surge 会跳过脚本并透传响应。主机匹配兼容 URL 中显式出现的 `:443`。
+
 ## 快照信息
 
 - 上游仓库：<https://github.com/app2smile/rules>
@@ -35,3 +37,5 @@
 ## 行为说明
 
 上游脚本会改写 Spotify 客户端收到的二进制响应中的账户属性，包括把部分属性设置为 `premium`、`ads=false` 等。这属于客户端侧响应改写；它不会更改 Spotify 账户的真实订阅状态。请自行评估兼容性和服务条款影响。
+
+快照中对 Protobuf 脚本的 `max-size` 设置做了修正：Surge 使用 `-1` 表示不限制，而不是 `0`；这里设为 1 MiB，避免无限缓冲。响应体超限时会按 Surge 行为跳过脚本并透传。参考 [Surge HTTP Response Script 文档](https://manual.nssurge.com/scripting/http-response.html)。
