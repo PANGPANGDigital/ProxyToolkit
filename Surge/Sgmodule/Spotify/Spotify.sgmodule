@@ -1,11 +1,13 @@
 #!name=Spotify.Fix
-#!desc=iOS 15+；提供账户状态与艺人/专辑展示改写。
+#!desc=iOS 15+；提供账户状态、艺人/专辑展示及 Spotify 请求 UA 改写。
 # Upstream snapshot: app2smile/rules @ df6366a7024e0b3f0aa3510c5b791eea6f3cba89
 # 功能: 1.改写账户/播放状态 2.适配歌手/专辑页展示 3.调整随机播放行为
+# 将 spclient 请求 UA 中的 iPhone 替换为 iPad（仅当该 UA 文本存在时）
 
 [Header Rewrite]
 # if-none-match返回304状态码
 http-request ^https:\/\/(spclient\.wg\.spotify\.com|.*-spclient\.spotify\.com)(:443)?\/user-customization-service\/v1\/customize(?:\?.*)?$ header-del if-none-match
+http-request ^https:\/\/(spclient\.wg\.spotify\.com|.*-spclient\.spotify\.com)(:443)?\/ header-replace-regex User-Agent iPhone iPad
 
 [MITM]
 hostname = %APPEND% spclient.wg.spotify.com, *spclient.spotify.com
