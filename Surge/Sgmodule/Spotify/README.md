@@ -1,6 +1,6 @@
-# Spotify Surge 模块（本地快照）
+# Spotify Surge 模块（快照）
 
-这是 `app2smile/rules` 仓库中 Spotify Surge 模块的一份离线快照。模块本身及其两份 JavaScript 脚本均保存在本目录，不再从 GitHub 下载脚本；上游仓库删除后，这份本地副本仍可用。
+这是 `app2smile/rules` 仓库中 Spotify Surge 模块的一份快照。
 
 ## 安装为 Surge 本地模块
 
@@ -24,15 +24,7 @@
 - 获取日期：2026-10-14
 - 上游许可证：MIT，见 `LICENSE.md`
 - 脚本 SHA-256：`spotify-json.js` = `41cf1074770cdef3948baa12ff4a8db9045d1cac888714c8b7e69909eb531bc9`；`spotify-proto.js` = `2e6850e888d092905c766f0bbedc4b4afb9a712330970cc1265105d7fb4995d0`
-- 这是一份静态快照，不会自动跟随上游更新。
 
-## 候选域名规则
-
-模块额外对以下 9 个精确主机名使用 `REJECT`：`aet.spotify.com`、`adeventtracker.spotify.com`、`ads-fa.spotify.com`、`ads-akp.spotify.com`、`audio-ads.spotify.com`、`analytics.spotify.com`、`metrics.spotify.com`、`crashdump.spotify.com`、`log.spotify.com`。规则由模块插入 Surge 的规则列表顶部，只匹配这些完整主机名，不匹配其他 `spotify.com` 子域名。
-
-这些域名不等同于广告素材来源。`aet` 和 `adeventtracker` 更像广告事件/曝光统计端点；`analytics`、`metrics`、`crashdump`、`log` 属于遥测或错误日志类候选，屏蔽它们主要影响统计/日志回传。其余广告域名在旧版第三方屏蔽列表中出现过，但其中 `ads-fa`、`ads-akp`、`audio-ads`、`metrics` 在制作快照时的公共 DNS 查询未返回 A/CNAME 记录，可能已停用或仅在特定区域/客户端版本出现。
-
-因此这些规则有机会阻断仍在使用的独立广告请求或统计请求，但**不能保证移除 Spotify 免费用户广告**。一份 2024 年 Spotify 桌面客户端的公开流量记录曾观察到 `spclient` 主机下的 `/ad-logic/prefetch` 和 `/ads/v3/ads?slots=hpto` 请求（[记录](https://github.com/abba23/spotify-adblock/issues/186)）；这不能证明 iOS 上的 RapCaviar 原生推广卡片使用同一接口。如果广告数据与 Spotify API/CDN 共用主机，按域名封锁会无效或影响其他功能。模块原有 `spotify-proto.js` 对 `ads=false` 的响应改写与这些域名规则是两种独立机制。
 
 ## 行为说明
 
