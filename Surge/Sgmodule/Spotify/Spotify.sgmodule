@@ -1,19 +1,9 @@
 #!name=Spotify.Fix
-#!desc=iOS 15+；含9条候选域名拦截规则，不保证去除全部广告。
+#!desc=iOS 15+；提供账户状态与艺人/专辑展示改写；广告域名规则待实机请求验证。
 # Upstream snapshot: app2smile/rules @ df6366a7024e0b3f0aa3510c5b791eea6f3cba89
 # 功能: 1.去除播放广告 2.歌手/专辑列表正常展示 3.去除随机播放
-
-[Rule]
-# 候选广告/统计主机：精确域名拦截；不保证能拦截广告内容
-DOMAIN,aet.spotify.com,REJECT
-DOMAIN,adeventtracker.spotify.com,REJECT
-DOMAIN,ads-fa.spotify.com,REJECT
-DOMAIN,ads-akp.spotify.com,REJECT
-DOMAIN,audio-ads.spotify.com,REJECT
-DOMAIN,analytics.spotify.com,REJECT
-DOMAIN,metrics.spotify.com,REJECT
-DOMAIN,crashdump.spotify.com,REJECT
-DOMAIN,log.spotify.com,REJECT
+# 广告域名规则暂留空：此前九条只是候选统计/遥测主机，未证实承载广告素材或推广卡片。
+# 不拦截 spclient 与共用 CDN 主机，避免影响账户接口、播放及封面/Canvas 等内容资源。
 
 [Header Rewrite]
 # if-none-match返回304状态码
