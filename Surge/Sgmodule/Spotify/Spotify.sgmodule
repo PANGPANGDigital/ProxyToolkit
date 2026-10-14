@@ -1,5 +1,5 @@
-#!name=Spotify (local snapshot)
-#!desc=本地快照；iOS 15+；含9条候选域名拦截规则，不保证去除全部广告。
+#!name=Spotify.Fix
+#!desc=iOS 15+；含9条候选域名拦截规则，不保证去除全部广告。
 # Upstream snapshot: app2smile/rules @ df6366a7024e0b3f0aa3510c5b791eea6f3cba89
 # 功能: 1.去除播放广告 2.歌手/专辑列表正常展示 3.去除随机播放
 
