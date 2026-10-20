@@ -1,4 +1,4 @@
-# 网易云音乐去广告（Surge）
+# NeteaseAds.Unblock（Surge）
 
 本目录保存网易云音乐去广告 Surge 模块及其脚本快照。模块由 [ddgksf2013/Rewrite](https://github.com/ddgksf2013/Rewrite) 的 `AdBlock/NeteaseAds.conf` 转换而来。
 
@@ -23,7 +23,7 @@ Surge 按模块配置每 24 小时检查一次脚本更新。更新快照时，�
 在 Surge 的「模块」页面中选择「从 URL 安装」，使用以下地址：
 
 ```text
-https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/NeteaseAds.Unblock/%E7%BD%91%E6%98%93%E4%BA%91%E9%9F%B3%E4%B9%90%E5%8E%BB%E5%B9%BF%E5%91%8A.sgmodule
+https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/NeteaseAds.Unblock/NeteaseAds.Unblock.sgmodule
 ```
 
 使用前请在 Surge 中启用 HTTPS 解密并安装、信任 Surge 证书。模块会将 `interface*.music.163.com` 追加到 MITM 主机名列表。
