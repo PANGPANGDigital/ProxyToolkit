@@ -1,4 +1,4 @@
-#!name=网易云音乐去广告
+#!name=NeteaseAds.Unblock
 #!desc=由 ddgksf2013 的 NeteaseAds.conf 转换；需启用 Surge MITM 并信任证书。
 
 # Bundled script snapshot from ddgksf2013/Rewrite; script-path points to this repository.
