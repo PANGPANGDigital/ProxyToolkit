@@ -4,7 +4,7 @@
 
 ## 文件
 
-- `网易云音乐去广告.sgmodule`：Surge 模块配置。
+- `NeteaseAds.Unblock.sgmodule`：Surge 模块配置。
 - `netease.adblock.js`：随仓库保存的上游响应处理脚本快照。
 
 ## 固化上游脚本
