@@ -4,7 +4,7 @@
 
 ## 文件
 
-- `NeteaseAds.Unblock.sgmodule`：Surge 模块配置。
+- `NeteaseAds.sgmodule`：Surge 模块配置。
 - `netease.adblock.js`：随仓库保存的上游响应处理脚本快照。
 
 ## 固化上游脚本
@@ -23,7 +23,7 @@ Surge 按模块配置每 24 小时检查一次脚本更新。更新快照时，�
 在 Surge 的「模块」页面中选择「从 URL 安装」，使用以下地址：
 
 ```text
-https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/NeteaseAds.Unblock/NeteaseAds.Unblock.sgmodule
+https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/NeteaseAds.Unblock/NeteaseAds.sgmodule
 ```
 
 使用前请在 Surge 中启用 HTTPS 解密并安装、信任 Surge 证书。模块会将 `interface*.music.163.com` 追加到 MITM 主机名列表。
