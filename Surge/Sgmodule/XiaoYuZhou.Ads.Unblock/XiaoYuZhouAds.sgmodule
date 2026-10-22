@@ -2,7 +2,7 @@
 #!desc=基于 ddgksf2013 规则转换；拦截广告相关接口，并移除首页信息流横幅
 
 [MITM]
-hostname = %APPEND% api.xiaoyuzhoufm.com
+hostname = %APPEND% api.xiaoyuzhoufm.com, h5.xiaoyuzhoufm.com
 
 [Script]
 小宇宙广告接口 = type=http-request,pattern=^https?://api\.xiaoyuzhoufm\.com/v\d/(?:search/get-express|search/get-preset|category/list-daily-suggestion|flash-screen/list),script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/XiaoYuZhou.Ads.Unblock/XiaoYuZhouAds.js,timeout=10
