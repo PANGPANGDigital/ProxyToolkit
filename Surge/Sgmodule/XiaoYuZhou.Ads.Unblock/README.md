@@ -13,7 +13,6 @@
 - 搜索建议：拦截 `/category/list-daily-suggestion`
 - 开屏广告：拦截 `/flash-screen/list`
 - 首页信息流：从 `discovery-feed/list` 的 `data` 数组中移除 `type` 为 `DISCOVERY_BANNER` 的项目
-- 播客会员 H5 路径：拦截 `h5.xiaoyuzhoufm.com/podcast-member`
 
 ## 安装
 
@@ -25,7 +24,7 @@
 https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/XiaoYuZhou.Ads.Unblock/XiaoYuZhouAds.sgmodule
 ```
 
-模块会自动从 GitHub Raw 加载配套脚本，无需单独安装 JS。使用前请启用 HTTPS 解密（MITM），并安装、信任 Surge 证书。模块会将 `api.xiaoyuzhoufm.com` 和 `h5.xiaoyuzhoufm.com` 追加到 MITM 主机名列表。URL Rewrite 仅拒绝 H5 的 `/podcast-member` 路径，不拦截该主机的其他路径。拦截后，该 URL 对应的页面将无法加载。
+模块会自动从 GitHub Raw 加载配套脚本，无需单独安装 JS。使用前请启用 HTTPS 解密（MITM），并安装、信任 Surge 证书。模块会将 `api.xiaoyuzhoufm.com` 和 `h5.xiaoyuzhoufm.com` 追加到 MITM 主机名列表。当前规则只处理 `api.xiaoyuzhoufm.com` 的广告接口；加入 H5 主机是为了便于解密检查启动期间的 H5 请求，模块暂不改写 H5 响应。
 
 ## 文件结构
 
