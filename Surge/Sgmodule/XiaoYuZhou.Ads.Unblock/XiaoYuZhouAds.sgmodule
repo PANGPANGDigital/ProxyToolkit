@@ -5,5 +5,5 @@
 hostname = %APPEND% api.xiaoyuzhoufm.com, h5.xiaoyuzhoufm.com
 
 [Script]
-小宇宙广告接口 = type=http-request,pattern=^https?://api\\.xiaoyuzhoufm\\.com/v\\d/(?:search/get-express|search/get-preset|category/list-daily-suggestion|flash-screen/list),script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/XiaoYuZhou.Ads.Unblock/XiaoYuZhouAds.js,timeout=10
-小宇宙首页信息流 = type=http-response,pattern=^https?://api\\.xiaoyuzhoufm\\.com/v\\d/discovery-feed/list,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/XiaoYuZhou.Ads.Unblock/XiaoYuZhouAds.js,requires-body=true,max-size=1048576,timeout=10
+小宇宙广告接口 = type=http-request,pattern=^https?://api\.xiaoyuzhoufm\.com/v\d/(?:search/get-express|search/get-preset|category/list-daily-suggestion|flash-screen/list),script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/XiaoYuZhou.Ads.Unblock/XiaoYuZhouAds.js,timeout=10
+小宇宙首页信息流 = type=http-response,pattern=^https?://api\.xiaoyuzhoufm\.com/v\d/discovery-feed/list,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/XiaoYuZhou.Ads.Unblock/XiaoYuZhouAds.js,requires-body=true,max-size=1048576,timeout=10
