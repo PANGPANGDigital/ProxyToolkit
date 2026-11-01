@@ -1,20 +1,36 @@
 #!name=豆瓣去广告
-#!desc=过滤开屏广告素材、追踪埋点与通用广告接口（适用于官方 App Store 版）
-#!author=fmz200[https://github.com/fmz200/wool_scripts]
+#!desc=过滤开屏广告素材、追踪埋点、通用广告接口及第三方广告联盟（穿山甲/优量汇/京东物料）
+#!author=fmz200[https://github.com/fmz200/wool_scripts], PANGPANG
 #!category=去广告
 
 [Rule]
+# 豆瓣自身广告追踪与素材
 DOMAIN-SUFFIX,erebor.douban.com,REJECT
 DOMAIN-SUFFIX,ad.doubanio.com,REJECT
 
+# 第三方穿山甲广告联盟 (字节跳动)
+DOMAIN-SUFFIX,pangolin-sdk-toutiao.com,REJECT
+DOMAIN-SUFFIX,pangolin-sdk-toutiao1.com,REJECT
+DOMAIN-SUFFIX,pangle.io,REJECT
+
+# 第三方优量汇广告联盟 (腾讯广点通)
+DOMAIN-SUFFIX,gdt.qq.com,REJECT
+DOMAIN-SUFFIX,l.qq.com,REJECT
+
 [URL Rewrite]
+# 豆瓣自身广告素材与电影横幅
 ^https?:\/\/img\d\.doubanio\.com\/view\/dale-online\/dale_ad\/ - reject
 ^https?:\/\/frodo\.douban\.com\/api\/v2\/movie\/banner - reject
 ^https?:\/\/erebor\.douban\.com\/count\/\?ad= - reject
 
+# 京东开屏广告视频与弹窗物料（精准拦截，不影响京东正常购物）
+^https?:\/\/storage\.360buyimg\.com\/material-video\/ - reject
+^https?:\/\/img\d*\.360buyimg\.com\/pop\/ - reject
+
 [Map Local]
+# 豆瓣自有开屏与通用广告接口 Mock
 ^https?:\/\/api\.douban\.com\/v\d\/app_ads\/ data-type=text data="{}" status-code=200 header="Content-Type:application/json"
 ^https?:\/\/api\.douban\.com\/b.*\/common_ads\?.* data-type=text data="{}" status-code=200 header="Content-Type:application/json"
 
 [MITM]
-hostname = %APPEND% api.douban.com
+hostname = %APPEND% api.douban.com, *.360buyimg.com
