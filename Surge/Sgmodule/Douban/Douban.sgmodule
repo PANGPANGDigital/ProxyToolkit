@@ -8,17 +8,22 @@
 DOMAIN-SUFFIX,erebor.douban.com,REJECT
 DOMAIN-SUFFIX,ad.doubanio.com,REJECT
 
-# 第三方穿山甲广告联盟 (字节跳动)
+# 第三方穿山甲广告联盟与风控组件 (字节跳动)
 DOMAIN-SUFFIX,pangolin-sdk-toutiao.com,REJECT
 DOMAIN-SUFFIX,pangolin-sdk-toutiao1.com,REJECT
 DOMAIN-SUFFIX,pangle.io,REJECT
+DOMAIN,mssdk.volces.com,REJECT
 
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
 DOMAIN-SUFFIX,l.qq.com,REJECT
 
-# 友盟数据统计与错误日志上报
+# 友盟数据统计与错误日志上报 (主备域名)
 DOMAIN-SUFFIX,umeng.com,REJECT
+DOMAIN-SUFFIX,umengcloud.com,REJECT
+
+# 阿里 UserTrack 用户行为与埋点采集
+DOMAIN-SUFFIX,ut.taobao.com,REJECT
 
 # 羽毛广告设备指纹与风控监测
 DOMAIN-SUFFIX,puata.info,REJECT
