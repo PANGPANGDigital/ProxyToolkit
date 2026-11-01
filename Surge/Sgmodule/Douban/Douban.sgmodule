@@ -15,6 +15,7 @@ DOMAIN-SUFFIX,pangle.io,REJECT
 DOMAIN,mssdk.volces.com,REJECT
 DOMAIN,apmplus.volces.com,REJECT
 DOMAIN,webcast-open.douyin.com,REJECT
+DOMAIN,vod-license-m.volccdn.com,REJECT
 
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
@@ -34,7 +35,7 @@ DOMAIN-SUFFIX,ut.taobao.com,REJECT
 DOMAIN-SUFFIX,puata.info,REJECT
 
 [URL Rewrite]
-# 豆瓣自身广告素材与电影横幅
+# 豆瓣自身广告素材与电影横幅 (需开启 *.doubanio.com MITM 进行路径匹配)
 ^https?:\/\/img\d\.doubanio\.com\/view\/dale-online\/dale_ad\/ - reject
 ^https?:\/\/frodo\.douban\.com\/api\/v2\/movie\/banner - reject
 ^https?:\/\/erebor\.douban\.com\/count\/\?ad= - reject
@@ -49,4 +50,4 @@ DOMAIN-SUFFIX,puata.info,REJECT
 ^https?:\/\/api\.douban\.com\/b.*\/common_ads\?.* data-type=text data="{}" status-code=200 header="Content-Type:application/json"
 
 [MITM]
-hostname = %APPEND% api.douban.com, *.360buyimg.com
+hostname = %APPEND% api.douban.com, *.360buyimg.com, *.doubanio.com

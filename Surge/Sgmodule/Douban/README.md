@@ -10,7 +10,7 @@
 
 - **开屏与通用广告接口拦截**：通过 `Map Local` 将 `/v*/app_ads/` 和 `/b*/common_ads` 本地伪造返回空 JSON (`{}`)，避免客户端报网络错误或反复重试。
 - **第三方广告联盟兜底拦截**：全面阻断当自有广告为空时调用的第三方广告 SDK：
-  - **穿山甲广告联盟 (字节跳动)**：阻断 `pangolin-sdk-toutiao.com`、`pangle.io`、风控组件 `mssdk.volces.com`、性能上报 `apmplus.volces.com` 及直播引流 `webcast-open.douyin.com`。
+  - **穿山甲广告联盟 (字节跳动)**：阻断 `pangolin-sdk-toutiao.com`、`pangle.io`、风控组件 `mssdk.volces.com`、性能上报 `apmplus.volces.com`、直播引流 `webcast-open.douyin.com` 及视频点播授权 `vod-license-m.volccdn.com`。
   - **优量汇广告联盟 (腾讯广点通)**：阻断 `gdt.qq.com`、`l.qq.com`。
   - **京东广告联盟**：阻断曝光打点 `im-x.jd.com`，精准拦截 `storage.360buyimg.com` 广告视频与弹窗物料（不影响京东正常购物浏览）。
 - **设备指纹、风控与遥测日志阻断**：
@@ -18,7 +18,7 @@
   - **阿里（UserTrack）**：阻断 `ut.taobao.com`（`h-adashx4bc.ut.taobao.com`）移动行为事件与埋点收集。
   - **羽毛（Puata）**：阻断 `puata.info`（`yumao.puata.info`）设备指纹采集与广告风控监测。
 - **数据埋点与追踪阻断**：在分流（Rule）与重写层全面拦截豆瓣专属统计域名 `erebor.douban.com` 与 `ad.doubanio.com`。
-- **静态广告素材阻断**：拦截图片 CDN 目录中的静态广告（`dale_ad`）与电影横幅（`movie/banner`）。
+- **静态广告素材阻断**：开启 `*.doubanio.com` MITM 进行深度路径识别，精准拦截图片 CDN 目录中的静态广告（`dale_ad`）与电影横幅（`movie/banner`），完全不影响电影海报、剧照及头像正常浏览。
 
 ---
 
@@ -48,7 +48,7 @@ Douban/
 
 ## 使用说明与注意事项
 
-1. **HTTPS 解密 (MITM)**：使用前请确保 Surge 已开启 MITM，并且系统已安装并完全信任 Surge 生成的 CA 根证书。模块会自动将 `api.douban.com` 与 `*.360buyimg.com` 追加到 MITM 主机名列表中。
+1. **HTTPS 解密 (MITM)**：使用前请确保 Surge 已开启 MITM，并且系统已安装并完全信任 Surge 生成的 CA 根证书。模块会自动将 `api.douban.com`、`*.360buyimg.com` 和 `*.doubanio.com` 追加到 MITM 主机名列表中。
 2. **清除开屏广告缓存**：豆瓣 App 本地会缓存开屏广告素材。首次安装启用模块后，请强制退出豆瓣后台并重新打开；若仍有开屏广告，可进入豆瓣「设置」->「清理缓存」，冷启动 1~2 次即可生效。
 3. **关于官方 App 的证书绑定 (SSL Pinning)**：由于官方 App 对核心域名 `frodo.douban.com` 启用了严格的 SSL Pinning，因此本模块仅拦截素材与非 Pinning 接口，切勿随意将 `frodo.douban.com` 加入 MITM，以免导致官方客户端无法联网。
 
