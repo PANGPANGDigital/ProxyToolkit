@@ -10,8 +10,8 @@
 
 - **开屏与通用广告接口拦截**：通过 `Map Local` 将 `/v*/app_ads/` 和 `/b*/common_ads` 本地伪造返回空 JSON (`{}`)，避免客户端报网络错误或反复重试。
 - **第三方广告联盟兜底拦截**：全面阻断当自有广告为空时调用的第三方广告 SDK：
-  - **穿山甲广告联盟 (字节跳动)**：阻断 `pangolin-sdk-toutiao.com`、`pangle.io`、风控组件 `mssdk.volces.com`、性能上报 `apmplus.volces.com`、直播引流 `webcast-open.douyin.com`，并通过 `vod-license` 关键词通配切断所有主备视频播放授权。
-  - **优量汇广告联盟 (腾讯广点通)**：阻断数据网关 `gdt.qq.com`、`l.qq.com`、广告 SDK 核心控制接口 `sdk.e.qq.com` 以及官方广告图片物料 CDN `*.gdtimg.com`。
+  - **穿山甲广告联盟 (字节跳动)**：通过关键词通配 `pangolin-sdk-toutiao` 全面拦截所有主备接口（含 `-b`、`-c` 等容灾节点）、`pangle.io`、风控组件 `mssdk.volces.com`、性能上报 `apmplus.volces.com`、直播引流 `webcast-open.douyin.com`，并通过 `vod-license` 关键词通配切断所有主备视频播放授权。
+  - **优量汇广告联盟 (腾讯广点通)**：阻断数据网关 `gdt.qq.com`、`l.qq.com`、广告 SDK 核心控制接口 `sdk.e.qq.com`，并通过关键词通配 `gdtimg` 全面封死包括 `gdtimg.com`、`ugdtimg.com`（`adsmind` 智能投放素材库）等在内的全部官方广告图片 CDN。
   - **京东广告联盟**：阻断源头策略拉取 `janapi.jd.com`、曝光打点 `im-x.jd.com`、日志遥测 `xlog.jd.com`，并精准拦截 `storage.360buyimg.com` 广告视频与弹窗物料（不影响京东正常购物浏览）。
 - **设备指纹、风控与遥测日志阻断**：
   - **友盟（Umeng）**：全面切断主备日志域名 `umeng.com` 与 `umengcloud.com`（`cnlogs.umengcloud.com`）。
