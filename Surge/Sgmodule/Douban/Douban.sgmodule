@@ -1,0 +1,20 @@
+#!name=豆瓣去广告
+#!desc=过滤开屏广告素材、追踪埋点与通用广告接口（适用于官方 App Store 版）
+#!author=fmz200[https://github.com/fmz200/wool_scripts]
+#!category=去广告
+
+[Rule]
+DOMAIN-SUFFIX,erebor.douban.com,REJECT
+DOMAIN-SUFFIX,ad.doubanio.com,REJECT
+
+[URL Rewrite]
+^https?:\/\/img\d\.doubanio\.com\/view\/dale-online\/dale_ad\/ - reject
+^https?:\/\/frodo\.douban\.com\/api\/v2\/movie\/banner - reject
+^https?:\/\/erebor\.douban\.com\/count\/\?ad= - reject
+
+[Map Local]
+^https?:\/\/api\.douban\.com\/v\d\/app_ads\/ data-type=text data="{}" status-code=200 header="Content-Type:application/json"
+^https?:\/\/api\.douban\.com\/b.*\/common_ads\?.* data-type=text data="{}" status-code=200 header="Content-Type:application/json"
+
+[MITM]
+hostname = %APPEND% api.douban.com
