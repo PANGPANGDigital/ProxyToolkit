@@ -13,6 +13,9 @@
   - **穿山甲广告联盟 (字节跳动)**：阻断 `pangolin-sdk-toutiao.com`、`pangle.io` 等相关域名。
   - **优量汇广告联盟 (腾讯广点通)**：阻断 `gdt.qq.com`、`l.qq.com`。
   - **京东开屏广告物料**：精准拦截 `storage.360buyimg.com` 广告视频与弹窗物料（不影响京东正常购物浏览）。
+- **设备指纹、风控与遥测日志阻断**：
+  - **友盟（Umeng）**：阻断 `umeng.com` 错误日志（`errnewlog.umeng.com`）与性能监控上报。
+  - **羽毛（Puata）**：阻断 `puata.info`（`yumao.puata.info`）设备指纹采集与广告风控监测。
 - **数据埋点与追踪阻断**：在分流（Rule）与重写层全面拦截豆瓣专属统计域名 `erebor.douban.com` 与 `ad.doubanio.com`。
 - **静态广告素材阻断**：拦截图片 CDN 目录中的静态广告（`dale_ad`）与电影横幅（`movie/banner`）。
 

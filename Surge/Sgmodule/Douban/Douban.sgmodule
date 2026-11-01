@@ -1,5 +1,5 @@
 #!name=豆瓣去广告
-#!desc=过滤开屏广告素材、追踪埋点、通用广告接口及第三方广告联盟（穿山甲/优量汇/京东物料）
+#!desc=过滤开屏广告素材、追踪埋点、通用广告接口、第三方广告联盟（穿山甲/优量汇/京东物料）及设备指纹风控
 #!author=fmz200[https://github.com/fmz200/wool_scripts], PANGPANG
 #!category=去广告
 
@@ -16,6 +16,12 @@ DOMAIN-SUFFIX,pangle.io,REJECT
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
 DOMAIN-SUFFIX,l.qq.com,REJECT
+
+# 友盟数据统计与错误日志上报
+DOMAIN-SUFFIX,umeng.com,REJECT
+
+# 羽毛广告设备指纹与风控监测
+DOMAIN-SUFFIX,puata.info,REJECT
 
 [URL Rewrite]
 # 豆瓣自身广告素材与电影横幅
