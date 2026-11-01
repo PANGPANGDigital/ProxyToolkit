@@ -1,4 +1,4 @@
-# 豆瓣 App 去广告
+# 豆瓣 App Ads
 
 为豆瓣 App 去广告的 Surge 模块（适用于官方 App Store 版本）。
 
