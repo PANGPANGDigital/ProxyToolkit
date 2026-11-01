@@ -15,12 +15,14 @@ DOMAIN,mssdk.volces.com,REJECT
 DOMAIN,apmplus.volces.com,REJECT
 DOMAIN,webcast-open.douyin.com,REJECT
 DOMAIN-KEYWORD,vod-license,REJECT
+DOMAIN-SUFFIX,ctobsnssdk.com,REJECT
 
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
 DOMAIN-SUFFIX,l.qq.com,REJECT
 DOMAIN-SUFFIX,e.qq.com,REJECT
 DOMAIN-KEYWORD,gdtimg,REJECT
+DOMAIN-SUFFIX,trtcube-license.cn,REJECT
 
 # 京东广告联盟（广告拉取、曝光与埋点）
 DOMAIN,janapi.jd.com,REJECT
@@ -31,7 +33,8 @@ DOMAIN,xlog.jd.com,REJECT
 DOMAIN-SUFFIX,umeng.com,REJECT
 DOMAIN-SUFFIX,umengcloud.com,REJECT
 
-# 阿里 UserTrack 用户行为与埋点采集
+# 阿里百川与 UserTrack 行为埋点采集
+DOMAIN,baichuan-sdk.taobao.com,REJECT
 DOMAIN-SUFFIX,ut.taobao.com,REJECT
 
 # 羽毛广告设备指纹与风控监测

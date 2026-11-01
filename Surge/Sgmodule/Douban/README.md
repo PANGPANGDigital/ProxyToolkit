@@ -10,12 +10,12 @@
 
 - **开屏与通用广告接口拦截**：通过 `Map Local` 将 `/v*/app_ads/` 和 `/b*/common_ads` 本地伪造返回空 JSON (`{}`)，避免客户端报网络错误或反复重试。
 - **第三方广告联盟兜底拦截**：全面阻断当自有广告为空时调用的第三方广告 SDK：
-  - **穿山甲广告联盟 (字节跳动)**：通过关键词通配 `pangolin-sdk-toutiao` 全面拦截所有主备接口（含 `-b`、`-c` 等容灾节点）、`pangle.io`、风控组件 `mssdk.volces.com`、性能上报 `apmplus.volces.com`、直播引流 `webcast-open.douyin.com`，并通过 `vod-license` 关键词通配切断所有主备视频播放授权。
-  - **优量汇广告联盟 (腾讯广点通)**：全面阻断数据网关 `gdt.qq.com`、`l.qq.com`，通过 `DOMAIN-SUFFIX,e.qq.com` 彻底截断包括 `sdk.e.qq.com` 与 QUIC 备用协议 `sdkquic.e.qq.com` 在内的腾讯效果广告全系控制接口，并通过关键词通配 `gdtimg` 全面封死包括 `gdtimg.com`、`ugdtimg.com` 等全部官方广告图片 CDN。
+  - **穿山甲广告联盟 (字节跳动)**：通过关键词通配 `pangolin-sdk-toutiao` 全面拦截所有主备接口（含 `-b`、`-c` 等容灾节点）、`pangle.io`、风控组件 `mssdk.volces.com`、性能上报 `apmplus.volces.com`、直播引流 `webcast-open.douyin.com`、日志上报 `ctobsnssdk.com`，并通过 `vod-license` 关键词通配切断所有主备视频播放授权。
+  - **优量汇广告联盟 (腾讯广点通)**：全面阻断数据网关 `gdt.qq.com`、`l.qq.com`，通过 `DOMAIN-SUFFIX,e.qq.com` 彻底截断包括 `sdk.e.qq.com` 与 QUIC 备用协议 `sdkquic.e.qq.com` 在内的腾讯效果广告全系控制接口，并通过关键词通配 `gdtimg` 全面封死包括 `gdtimg.com`、`ugdtimg.com` 等全部官方广告图片 CDN，以及阻断音视频组件授权 `trtcube-license.cn`。
   - **京东广告联盟**：阻断源头策略拉取 `janapi.jd.com`、曝光打点 `im-x.jd.com`、日志遥测 `xlog.jd.com`，并精准拦截 `storage.360buyimg.com` 广告视频与弹窗物料（不影响京东正常购物浏览）。
 - **设备指纹、风控与遥测日志阻断**：
   - **友盟（Umeng）**：全面切断主备日志域名 `umeng.com` 与 `umengcloud.com`（`cnlogs.umengcloud.com`）。
-  - **阿里（UserTrack）**：阻断 `ut.taobao.com`（`h-adashx4bc.ut.taobao.com`）移动行为事件与埋点收集。
+  - **阿里（百川与 UserTrack）**：阻断百川 SDK `baichuan-sdk.taobao.com` 及 `ut.taobao.com`（`h-adashx4bc.ut.taobao.com`）移动行为事件与埋点收集。
   - **羽毛（Puata）**：阻断 `puata.info`（`yumao.puata.info`）设备指纹采集与广告风控监测。
 - **数据埋点与追踪阻断**：在分流（Rule）与重写层全面拦截豆瓣专属统计域名 `erebor.douban.com` 与 `ad.doubanio.com`。
 - **静态广告素材阻断**：开启 `*.doubanio.com` MITM 进行深度路径识别，精准拦截图片 CDN 目录中的静态广告（`dale_ad`）与电影横幅（`movie/banner`），完全不影响电影海报、剧照及头像正常浏览。
