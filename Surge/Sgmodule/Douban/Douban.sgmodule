@@ -15,11 +15,12 @@ DOMAIN-SUFFIX,pangle.io,REJECT
 DOMAIN,mssdk.volces.com,REJECT
 DOMAIN,apmplus.volces.com,REJECT
 DOMAIN,webcast-open.douyin.com,REJECT
-DOMAIN,vod-license-m.volccdn.com,REJECT
+DOMAIN-KEYWORD,vod-license,REJECT
 
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
 DOMAIN-SUFFIX,l.qq.com,REJECT
+DOMAIN,sdk.e.qq.com,REJECT
 
 # 京东广告联盟曝光与归因上报
 DOMAIN,im-x.jd.com,REJECT
