@@ -13,10 +13,15 @@ DOMAIN-SUFFIX,pangolin-sdk-toutiao.com,REJECT
 DOMAIN-SUFFIX,pangolin-sdk-toutiao1.com,REJECT
 DOMAIN-SUFFIX,pangle.io,REJECT
 DOMAIN,mssdk.volces.com,REJECT
+DOMAIN,apmplus.volces.com,REJECT
+DOMAIN,webcast-open.douyin.com,REJECT
 
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
 DOMAIN-SUFFIX,l.qq.com,REJECT
+
+# 京东广告联盟曝光与归因上报
+DOMAIN,im-x.jd.com,REJECT
 
 # 友盟数据统计与错误日志上报 (主备域名)
 DOMAIN-SUFFIX,umeng.com,REJECT
