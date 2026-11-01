@@ -19,7 +19,7 @@ DOMAIN-KEYWORD,vod-license,REJECT
 # 第三方优量汇广告联盟 (腾讯广点通)
 DOMAIN-SUFFIX,gdt.qq.com,REJECT
 DOMAIN-SUFFIX,l.qq.com,REJECT
-DOMAIN,sdk.e.qq.com,REJECT
+DOMAIN-SUFFIX,e.qq.com,REJECT
 DOMAIN-KEYWORD,gdtimg,REJECT
 
 # 京东广告联盟（广告拉取、曝光与埋点）
