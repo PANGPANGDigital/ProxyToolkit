@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.5] - 2026-11
+
+**Added & Fixed**
+
+- **REALITY 后量子支持**：Clash/mihomo 订阅与分享链接增加 `support-x25519mlkem768: true`，修复 mihomo 连接新版 Xray (≥ 26.9.9) REALITY 超时。
+- **公网 IP 变动检测**：新增每 30 分钟定时检测任务（`--check-ip`），双接口校验确认公网 IP 变动后自动更新数据库、订阅与凭据文件。
+- **用户配额真实生效**：修复用户超额后核心仍允许连接的问题，在运行核心中真实剔除；流量重置后自动恢复因配额超额停用且未过期的用户。
+- **Sing-box 核心修复**：真实证书模式下 REALITY 握手转发目标对齐本机 Nginx；修复无 Sing-box 协议时升级统计核心报错问题；升级支持 Sing-box 1.14.4 预编译包。
+- **看门狗空转修复**：仅在安装了 Xray/Sing-box 核心协议时守护 `vless-reality` 服务，避免独立服务（如 Snell）被误重启。
+- **普通 Shadowsocks 独立凭据**：按端口写入用户独立密码，并将 Sing-box 普通 SS 纳入流量统计。
+- **Surge 加白与面板增强**：Po0fw 增加原生 HTTP HEAD 连通性测试与自动重试机制；Po0 面板支持自定义固定槽与 FIFO 名称。
+
 ## [3.7.2] - 2026-09
 
 **Fixed**

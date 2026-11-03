@@ -34,7 +34,7 @@ fi
 #  作者地址:https://docs.vaiox.de/
 #═══════════════════════════════════════════════════════════════════════════════
 
-readonly VERSION="3.7.2"
+readonly VERSION="3.7.5"
 readonly AUTHOR="Zyx0rx"
 readonly REPO_URL="https://github.com/PANGPANGDigital/ProxyToolkit"
 readonly SCRIPT_REPO="PANGPANGDigital/ProxyToolkit"
@@ -622,6 +622,13 @@ gen_xray_vless_clients() {
     
     local users=$(db_get_users_stats "xray" "$proto")
     if [[ -z "$users" ]]; then
+        # An explicit empty user array must never reactivate the legacy secret.
+        if db_get "xray" "$proto" | jq -e '
+            (if type=="array" then . else [.] end) |
+            any(.[]; (.users | type)=="array")' >/dev/null 2>&1; then
+            echo "[]"
+            return
+        fi
         # 尝试从配置中获取默认 UUID（支持多端口数组）
         local config=$(db_get "xray" "$proto")
         if [[ -n "$config" && "$config" != "null" ]]; then
@@ -684,6 +691,13 @@ gen_xray_vmess_clients() {
     
     local users=$(db_get_users_stats "xray" "$proto")
     if [[ -z "$users" ]]; then
+        # An explicit empty user array must never reactivate the legacy secret.
+        if db_get "xray" "$proto" | jq -e '
+            (if type=="array" then . else [.] end) |
+            any(.[]; (.users | type)=="array")' >/dev/null 2>&1; then
+            echo "[]"
+            return
+        fi
         # 尝试从配置中获取默认 UUID（支持多端口数组）
         local config=$(db_get "xray" "$proto")
         if [[ -n "$config" && "$config" != "null" ]]; then
@@ -717,6 +731,13 @@ gen_xray_trojan_clients() {
     
     local users=$(db_get_users_stats "xray" "$proto")
     if [[ -z "$users" ]]; then
+        # An explicit empty user array must never reactivate the legacy secret.
+        if db_get "xray" "$proto" | jq -e '
+            (if type=="array" then . else [.] end) |
+            any(.[]; (.users | type)=="array")' >/dev/null 2>&1; then
+            echo "[]"
+            return
+        fi
         # 尝试从配置中获取默认 password（支持多端口数组）
         local config=$(db_get "xray" "$proto")
         if [[ -n "$config" && "$config" != "null" ]]; then
@@ -751,6 +772,13 @@ gen_xray_ss2022_clients() {
     
     local users=$(db_get_users_stats "xray" "$proto")
     if [[ -z "$users" ]]; then
+        # An explicit empty user array must never reactivate the legacy secret.
+        if db_get "xray" "$proto" | jq -e '
+            (if type=="array" then . else [.] end) |
+            any(.[]; (.users | type)=="array")' >/dev/null 2>&1; then
+            echo "[]"
+            return
+        fi
         # SS2022 多用户模式必须有 users 数组，返回空
         echo "[]"
         return
@@ -773,6 +801,13 @@ gen_xray_socks_accounts() {
     
     local users=$(db_get_users_stats "xray" "$proto")
     if [[ -z "$users" ]]; then
+        # An explicit empty user array must never reactivate the legacy secret.
+        if db_get "xray" "$proto" | jq -e '
+            (if type=="array" then . else [.] end) |
+            any(.[]; (.users | type)=="array")' >/dev/null 2>&1; then
+            echo "[]"
+            return
+        fi
         # 尝试从配置中获取默认账号（支持多端口数组）
         local config=$(db_get "xray" "$proto")
         if [[ -n "$config" && "$config" != "null" ]]; then
@@ -871,11 +906,17 @@ db_add_user() {
     # 添加用户 (支持多端口数组，包含 expire_date)
     _db_apply --arg c "$core" --arg p "$proto" --arg n "$name" --arg u "$uuid" \
        --argjson q "$quota" --arg cr "$created" --arg exp "$expire_date" '
+        def preserve_default:
+            if $p == "ss-legacy" and .users == null then
+                .users = [{name:"default",uuid:.password,quota:0,used:0,enabled:true,created:$cr}]
+            else . end;
         .[$c][$p] as $cfg |
         if ($cfg | type) == "array" then
+            .[$c][$p][0] |= preserve_default |
             # 多端口: 添加到第一个端口实例
             .[$c][$p][0].users = ((.[$c][$p][0].users // []) + [{name:$n,uuid:$u,quota:$q,used:0,enabled:true,created:$cr,expire_date:$exp}])
         else
+            .[$c][$p] |= preserve_default |
             # 单端口: 正常添加
             .[$c][$p].users = ((.[$c][$p].users // []) + [{name:$n,uuid:$u,quota:$q,used:0,enabled:true,created:$cr,expire_date:$exp}])
         end
@@ -1194,7 +1235,37 @@ db_set_user_traffic() {
 # 重置用户流量
 # 用法: db_reset_user_traffic "xray" "vless" "用户名"
 db_reset_user_traffic() {
-    db_set_user_traffic "$1" "$2" "$3" 0
+    local core="$1" proto="$2" name="$3" month="${4:-}" resume
+    [[ -z "$month" || "$month" =~ ^[0-9]{4}-[0-9]{2}$ ]] || return 1
+    # Keep the cause separate from enabled: false alone cannot distinguish
+    # manual suspension from a quota suspension.
+    _db_apply --arg c "$core" --arg p "$proto" --arg n "$name" --arg month "$month" --arg today "$(date +%F)" '
+        def reset_user:
+            if .name != $n or ($month != "" and .traffic_reset_month == $month) then . else
+                ((.disable_reason == "quota") or (.resume_after_quota_reset == true) or
+                 (.disable_reason == null and
+                  (.quota_enforced == true or .quota_exceeded_notified == true))) as $quota_stop |
+                .used = 0 |
+                (if $month != "" then .traffic_reset_month = $month else . end) |
+                .resume_after_quota_reset = ($quota_stop and
+                    ((.expire_date // "") == "" or .expire_date >= $today)) |
+                del(.quota_enforced, .quota_exceeded_notified, .last_alert_percent)
+            end;
+        if (.[$c][$p] | type) == "array" then
+            .[$c][$p] |= map(.users |= map(reset_user))
+        else .[$c][$p].users |= map(reset_user) end
+    ' || return 1
+    resume=$(db_get_user_field "$core" "$proto" "$name" resume_after_quota_reset)
+    if [[ "$resume" == true ]]; then
+        db_set_user_enabled "$core" "$proto" "$name" true || {
+            _err "流量已重置，但用户恢复未生效；请重试重置流量"
+            return 1
+        }
+        db_set_user_alert_state "$core" "$proto" "$name" resume_after_quota_reset false || return 1
+        _ok "用户 $name 流量已重置，已自动恢复并应用配置"
+    else
+        _info "用户 $name 流量已重置；保留原启停状态（手动停用或到期不会自动恢复）"
+    fi
 }
 
 # 设置用户配额 (支持多端口数组格式)
@@ -1221,7 +1292,7 @@ db_set_user_quota() {
 # 启用/禁用用户 (支持多端口数组格式)
 # 用法: db_set_user_enabled "xray" "vless" "用户名" true/false
 db_set_user_enabled() {
-    local core="$1" proto="$2" name="$3" enabled="$4"
+    local core="$1" proto="$2" name="$3" enabled="$4" reason="${5:-manual}"
     [[ ! -f "$DB_FILE" ]] && return 1
     if _snell_managed "$proto" && [[ "$enabled" == true ]]; then
         local snell_user
@@ -1235,12 +1306,20 @@ db_set_user_enabled() {
         fi
     fi
     
-    _db_apply --arg c "$core" --arg p "$proto" --arg n "$name" --argjson e "$enabled" '
+    _db_apply --arg c "$core" --arg p "$proto" --arg n "$name" --argjson e "$enabled" --arg reason "$reason" '
+        def state:
+            if .name != $n then . else
+                .enabled = $e |
+                if $e then del(.disable_reason)
+                elif $reason == "manual" then .disable_reason = "manual" | .resume_after_quota_reset = false
+                elif .disable_reason != "manual" then .disable_reason = $reason
+                else . end
+            end;
         .[$c][$p] as $cfg |
         if ($cfg | type) == "array" then
-            .[$c][$p] = [$cfg[] | .users = ([.users // [] | .[] | if .name == $n then .enabled = $e else . end])]
+            .[$c][$p] = [$cfg[] | .users = ([.users // [] | .[] | state])]
         else
-            .[$c][$p].users = [.[$c][$p].users // [] | .[] | if .name == $n then .enabled = $e else . end]
+            .[$c][$p].users = [.[$c][$p].users // [] | .[] | state]
         end
     ' || return 1
     
@@ -1249,6 +1328,8 @@ db_set_user_enabled() {
         _snell_apply_users "$proto" "$name"
     elif [[ "$core" == "xray" ]]; then
         rebuild_and_reload_xray "silent"
+    elif [[ "$core" == "singbox" ]]; then
+        _regenerate_config "$core" "$proto"
     fi
 }
 
@@ -1624,7 +1705,7 @@ check_and_disable_expired_users() {
     
     while IFS='|' read -r core proto name expire_date days_left; do
         [[ -z "$name" ]] && continue
-        db_set_user_enabled "$core" "$proto" "$name" false
+        db_set_user_enabled "$core" "$proto" "$name" false expired
         ((count++))
         [[ "$notify" == "--notify" ]] && send_tg_expired_notice "$name" "$proto" "$expire_date" "$core"
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 禁用: $name ($proto)" >> "$CFG/expire.log"
@@ -1717,8 +1798,8 @@ db_get_users_stats() {
         elif ($cfg | type) == "array" then
             # 多端口数组
             $cfg[] | . as $port_cfg |
-            if (.users | length) > 0 then
-                .users[] | "\(.name)|\(.uuid)|\(.used // 0)|\(.quota // 0)|\(.enabled // true)|\($port_cfg.port)|\(.routing // "")|\(.expire_date // "")"
+            if (.users | type) == "array" then
+                .users[] | "\(.name)|\(.uuid)|\(.used // 0)|\(.quota // 0)|\(.enabled != false)|\($port_cfg.port)|\(.routing // "")|\(.expire_date // "")"
             elif (.uuid != null or .password != null or .username != null) then
                 # 无 users 数组，生成默认用户（与 Xray email 格式一致使用 "default"）
                 "default|\(.uuid // .password // .username)|0|0|true|\(.port)||"
@@ -1727,8 +1808,8 @@ db_get_users_stats() {
             end
         else
             # 单端口对象
-            if ($cfg.users | length) > 0 then
-                $cfg.users[] | "\(.name)|\(.uuid)|\(.used // 0)|\(.quota // 0)|\(.enabled // true)|\($cfg.port)|\(.routing // "")|\(.expire_date // "")"
+            if ($cfg.users | type) == "array" then
+                $cfg.users[] | "\(.name)|\(.uuid)|\(.used // 0)|\(.quota // 0)|\(.enabled != false)|\($cfg.port)|\(.routing // "")|\(.expire_date // "")"
             elif ($cfg.uuid != null or $cfg.password != null or $cfg.username != null) then
                 "default|\($cfg.uuid // $cfg.password // $cfg.username)|0|0|true|\($cfg.port)||"
             else
@@ -2535,7 +2616,7 @@ _repair_singbox_stats_interactive() {
 _singbox_stats_config_ready() {
     [[ -f "$CFG/singbox.json" ]] || return 1
     local proto mappings name key keys="[]"
-    for proto in vless trojan hy2 tuic anytls; do
+    for proto in vless trojan hy2 tuic anytls ss-legacy; do
         mappings=$(_get_singbox_stat_user_mappings "$proto")
         [[ -n "$mappings" ]] || continue
         while IFS='|' read -r name key; do
@@ -2621,6 +2702,18 @@ _build_singbox_stats_core() (
     stage="验证新核心及现有配置"
     "$work/bin/sing-box" version | grep -q with_v2ray_api || return 1
     [[ "$("$work/bin/sing-box" version | awk '/^sing-box version / {print $3; exit}')" == "$version" ]] || { _err "构建输出版本与目标不一致"; return 1; }
+    if [[ ! -f "$CFG/singbox.json" ]]; then
+        # 卸载最后一个 Sing-box 协议时会删除配置；此时只替换核心，保留统计能力，不启动服务。
+        [[ -z "$(get_singbox_protocols)" ]] || { _err "存在 Sing-box 协议但缺少 $CFG/singbox.json，请先重建配置；未更换原核心"; return 1; }
+        stage="备份并替换核心"
+        backup=$(mktemp -d "$CFG/singbox-stats-backup.XXXXXX") || return 1
+        chmod 700 "$backup"
+        cp -p /usr/local/bin/sing-box "$backup/sing-box" || return 1
+        install -m 755 "$work/bin/sing-box" /usr/local/bin/sing-box.stats-new &&
+            mv -f /usr/local/bin/sing-box.stats-new /usr/local/bin/sing-box || return 1
+        _ok "Sing-box v$version 统计核心已更新；当前没有 Sing-box 协议，未启动服务。备份: $backup"
+        return 0
+    fi
     "$work/bin/sing-box" check -c "$CFG/singbox.json" || { _err "新核心不兼容现有配置，已取消替换"; return 1; }
     stage="安装 grpcurl 查询工具"
     install_singbox_stats_client || return 1
@@ -2669,7 +2762,8 @@ _update_singbox_preserving_stats() {
     _info "保留用户统计，先下载校验目标 v$target，再备份、替换、验证；无包或失败时保留/恢复原核心。"
     if _build_singbox_stats_core "$target"; then update_rc=0; else update_rc=$?; fi
     # 若更新前服务停止，只为 API 验证临时启动，结束后恢复停止状态。
-    if [[ "$running" == false ]]; then
+    # 没有配置时不会启动服务，服务文件也可能已删除，无需恢复。
+    if [[ "$running" == false && -f "$CFG/singbox.json" ]]; then
         svc stop vless-singbox || { _err "无法恢复更新前的停止状态"; return 1; }
     fi
     return "$update_rc"
@@ -2720,7 +2814,7 @@ for proto in ('vless', 'trojan', 'hy2', 'tuic', 'anytls'):
                 default_user = user
                 break
 
-        if default_user is None:
+        if default_user is None and not isinstance(obj.get('users'), list):
             users.insert(0, {
                 'name': 'default',
                 'uuid': secret,
@@ -2732,7 +2826,7 @@ for proto in ('vless', 'trojan', 'hy2', 'tuic', 'anytls'):
             })
             obj['users'] = users
             changed[0] = True
-        else:
+        elif default_user is not None:
             if not default_user.get('uuid'):
                 default_user['uuid'] = secret
                 changed[0] = True
@@ -2845,6 +2939,35 @@ mark_traffic_sync_result() {
          if $s == "ok" then .meta.last_traffic_sync = $t else . end' || true
 }
 
+_enforce_user_quotas() {
+    local core proto user used quota enabled enforced failed=0
+    for core in xray singbox; do
+        for proto in $(db_list_protocols "$core"); do
+            case "$proto" in snell*) continue ;; esac
+            for user in $(db_list_users "$core" "$proto"); do
+                used=$(db_get_user_field "$core" "$proto" "$user" used)
+                quota=$(db_get_user_field "$core" "$proto" "$user" quota)
+                [[ "$used" =~ ^[0-9]+$ && "$quota" =~ ^[0-9]+$ ]] || continue
+                (( quota > 0 && used >= quota )) || continue
+                enabled=$(db_get_user_field "$core" "$proto" "$user" enabled)
+                enforced=$(db_get_user_alert_state "$core" "$proto" "$user" quota_enforced)
+                if [[ "$enabled" == true || "$enforced" != true ]]; then
+                    # Persist failure before applying: a failed reload must be retried
+                    # even when no new traffic arrives or a notification was sent.
+                    db_set_user_alert_state "$core" "$proto" "$user" quota_enforced false || { failed=1; continue; }
+                    if ! db_set_user_enabled "$core" "$proto" "$user" false quota; then
+                        _warn "$core / $proto 用户停用未生效，将在下次同步重试" >&2
+                        failed=1
+                        continue
+                    fi
+                    db_set_user_alert_state "$core" "$proto" "$user" quota_enforced true || failed=1
+                fi
+            done
+        done
+    done
+    return "$failed"
+}
+
 # 同步实现。外层 sync_all_user_traffic() 负责加锁，避免 cron 与 TG 查询同时
 # 使用 -reset 读取核心计数器而造成流量遗漏。
 _sync_all_user_traffic_unlocked() {
@@ -2853,8 +2976,8 @@ _sync_all_user_traffic_unlocked() {
     [[ ! -f "$DB_FILE" ]] && return 1
     _ensure_singbox_default_users
     
-    # 月重置（仅重置数据库累计值，不影响实时计数器）
-    check_monthly_traffic_reset
+    # Collect outstanding counters before monthly reset so old usage is not
+    # immediately added back to the new month's zero balance.
     _snell_sync_traffic || { mark_traffic_sync_result "snell_error" 0; return 1; }
     
     # 检查是否需要发送每日报告
@@ -2866,6 +2989,7 @@ _sync_all_user_traffic_unlocked() {
     _pgrep sing-box && has_singbox=true
 
     if [[ "$has_xray" == "false" && "$has_singbox" == "false" ]]; then
+        check_monthly_traffic_reset || { mark_traffic_sync_result "monthly_reset_error" 0; return 1; }
         if _snell_any_managed; then
             mark_traffic_sync_result "ok" 0
         else
@@ -2883,9 +3007,13 @@ _sync_all_user_traffic_unlocked() {
     local reset_flag=""
     [[ "$reset" == "true" ]] && reset_flag="-reset"
     
+    local xray_failed=false xray_stats
     if [[ "$has_xray" == "true" ]]; then
-        xray api statsquery --server=127.0.0.1:${XRAY_API_PORT} $reset_flag 2>/dev/null | \
-            jq -r '.stat[]? | "\(.name // .Name) \(.value // .Value // 0)"' >> "$tmp_stats" 2>/dev/null || true
+        if xray_stats=$(xray api statsquery --server=127.0.0.1:${XRAY_API_PORT} $reset_flag 2>/dev/null); then
+            printf '%s\n' "$xray_stats" | jq -r '.stat[]? | "\(.name // .Name) \(.value // .Value // 0)"' >> "$tmp_stats" 2>/dev/null || xray_failed=true
+        else
+            xray_failed=true
+        fi
     fi
 
     local singbox_failed=false
@@ -2898,13 +3026,15 @@ _sync_all_user_traffic_unlocked() {
     
     if [[ ! -s "$tmp_stats" ]]; then
         rm -f "$tmp_stats"
+        _enforce_user_quotas || { mark_traffic_sync_result "enforcement_error" 0; return 1; }
         if [[ "$singbox_failed" == true ]]; then mark_traffic_sync_result "singbox_error" 0; return 1; fi
+        if [[ "$xray_failed" == true ]]; then mark_traffic_sync_result "xray_error" 0; return 1; fi
+        check_monthly_traffic_reset || { mark_traffic_sync_result "monthly_reset_error" 0; return 1; }
         mark_traffic_sync_result "no_stats" 0
         return 0
     fi
     
     local updated=0
-    local need_reload=false  # 标记是否需要重载 Xray 配置
     local notify_percent=$(tg_get_config "notify_quota_percent")
     notify_percent=${notify_percent:-80}
     
@@ -2927,7 +3057,7 @@ _sync_all_user_traffic_unlocked() {
             
             if [[ "$traffic" -gt 0 ]]; then
                 db_update_user_traffic "xray" "$proto" "$user" "$traffic"
-                ((updated++))
+                updated=$((updated + 1))
                 
                 local quota=$(db_get_user_field "xray" "$proto" "$user" "quota")
                 local used=$(db_get_user_field "xray" "$proto" "$user" "used")
@@ -2937,10 +3067,8 @@ _sync_all_user_traffic_unlocked() {
                     if [[ "$used" -ge "$quota" ]]; then
                         local exceeded_notified=$(db_get_user_alert_state "xray" "$proto" "$user" "quota_exceeded_notified")
                         if [[ "$exceeded_notified" != "true" ]]; then
-                            db_set_user_enabled "xray" "$proto" "$user" "false"
                             db_set_user_alert_state "xray" "$proto" "$user" "quota_exceeded_notified" "true"
                             tg_send_over_quota "$user" "$proto" "$used" "$quota" "xray"
-                            need_reload=true
                         fi
                     elif [[ "$percent" -ge "$notify_percent" ]]; then
                         local last_alert=$(db_get_user_alert_state "xray" "$proto" "$user" "last_alert_percent")
@@ -2965,7 +3093,7 @@ _sync_all_user_traffic_unlocked() {
 
     # 所有支持命名用户计数的 Sing-box 协议。
     if [[ "$has_singbox" == "true" && "$singbox_failed" == false ]]; then
-        for proto in vless trojan hy2 tuic anytls; do
+        for proto in vless trojan hy2 tuic anytls ss-legacy; do
             db_exists "singbox" "$proto" || continue
             local mappings=$(_get_singbox_stat_user_mappings "$proto")
             [[ -z "$mappings" ]] && continue
@@ -2982,7 +3110,7 @@ _sync_all_user_traffic_unlocked() {
 
                 if [[ "$traffic" -gt 0 ]]; then
                     db_update_user_traffic "singbox" "$proto" "$user" "$traffic"
-                    ((updated++))
+                    updated=$((updated + 1))
 
                     local quota=$(db_get_user_field "singbox" "$proto" "$user" "quota")
                     local used=$(db_get_user_field "singbox" "$proto" "$user" "used")
@@ -2992,7 +3120,6 @@ _sync_all_user_traffic_unlocked() {
                         if [[ "$used" -ge "$quota" ]]; then
                             local exceeded_notified=$(db_get_user_alert_state "singbox" "$proto" "$user" "quota_exceeded_notified")
                             if [[ "$exceeded_notified" != "true" ]]; then
-                                db_set_user_enabled "singbox" "$proto" "$user" "false"
                                 db_set_user_alert_state "singbox" "$proto" "$user" "quota_exceeded_notified" "true"
                                 tg_send_over_quota "$user" "$proto" "$used" "$quota" "singbox"
                             fi
@@ -3019,17 +3146,19 @@ _sync_all_user_traffic_unlocked() {
     fi
     
     rm -f "$tmp_stats"
+
+    _enforce_user_quotas || { mark_traffic_sync_result "enforcement_error" "$updated"; return 1; }
     
-    # 批量处理完成后统一重载配置（避免循环内多次重启）
-    if [[ "$need_reload" == "true" ]]; then
-        generate_xray_config 2>/dev/null
-        svc restart vless-reality 2>/dev/null
-    fi
 
     if [[ "$singbox_failed" == true ]]; then
         mark_traffic_sync_result "partial_singbox_error" "$updated"
         return 1
     fi
+    if [[ "$xray_failed" == true ]]; then
+        mark_traffic_sync_result "partial_xray_error" "$updated"
+        return 1
+    fi
+    check_monthly_traffic_reset || { mark_traffic_sync_result "monthly_reset_error" "$updated"; return 1; }
     mark_traffic_sync_result "ok" "$updated"
     
     return 0
@@ -3119,7 +3248,7 @@ get_all_traffic_stats() {
                     [[ "$xray_ok" == true ]] || status="统计不可用"
                 else
                     key=$(_singbox_stat_key_for_user "$proto" "$user"); raw="$singbox_stats"
-                    case "$proto" in vless|trojan|hy2|tuic|anytls) ;; *) supported=false ;; esac
+                    case "$proto" in vless|trojan|hy2|tuic|anytls|ss-legacy) ;; *) supported=false ;; esac
                     [[ "$singbox_ok" == true ]] || status="统计不可用"
                     [[ "$supported" == true ]] || status="统计不可用（未接入用户计数）"
                 fi
@@ -3187,30 +3316,94 @@ cron_service_is_active() {
     if command -v rc-service >/dev/null 2>&1; then
         rc-service cronie status >/dev/null 2>&1 && return 0
         rc-service crond status >/dev/null 2>&1 && return 0
+        rc-service dcron status >/dev/null 2>&1 && return 0
+        rc-service cron status >/dev/null 2>&1 && return 0
     fi
     _pgrep crond && return 0
     _pgrep cron && return 0
     return 1
 }
 
-ensure_cron_service_running() {
-    cron_service_is_active && return 0
+_cron_daemon_path() {
+    local candidate
+    for candidate in "$(command -v cron 2>/dev/null)" "$(command -v crond 2>/dev/null)" /usr/sbin/cron /usr/sbin/crond /sbin/crond; do
+        [[ -n "$candidate" && -x "$candidate" ]] && { printf '%s\n' "$candidate"; return 0; }
+    done
+    return 1
+}
 
+_install_cron_daemon() {
+    # 仅在用户主动启用定时任务时补装，不在后台修复中自动安装软件。
+    case "${DISTRO:-}" in
+        debian|ubuntu)
+            apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y cron
+            ;;
+        alpine)
+            apk add --no-cache cronie || apk add --no-cache dcron
+            ;;
+        centos|rhel|rocky|almalinux|fedora)
+            if command -v dnf >/dev/null 2>&1; then dnf install -y cronie
+            else yum install -y cronie; fi
+            ;;
+        *) _err "无法自动安装 cron，请安装系统对应的 cron/cronie 软件包"; return 1 ;;
+    esac
+}
+
+_start_cron_service() {
+    local unit daemon
+    if command -v systemctl >/dev/null 2>&1 && systemctl show-environment >/dev/null 2>&1; then
+        for unit in cron crond; do
+            # enable 失败不应短路 start（例如静态 unit）；不解除 masked 状态。
+            systemctl enable "$unit" || true
+            systemctl start "$unit" || continue
+            cron_service_is_active && return 0
+        done
+        return 1
+    fi
     if command -v rc-service >/dev/null 2>&1; then
-        rc-update add cronie default >/dev/null 2>&1 || rc-update add crond default >/dev/null 2>&1 || true
-        rc-service cronie start >/dev/null 2>&1 || rc-service crond start >/dev/null 2>&1 || true
+        for unit in cronie crond dcron cron; do
+            rc-update add "$unit" default || true
+            rc-service "$unit" start || continue
+            cron_service_is_active && return 0
+        done
+        return 1
     fi
-    if ! cron_service_is_active && command -v systemctl >/dev/null 2>&1; then
-        systemctl enable --now cron >/dev/null 2>&1 || systemctl enable --now crond >/dev/null 2>&1 || true
+    if command -v service >/dev/null 2>&1; then
+        service cron start || service crond start || true
+        cron_service_is_active && return 0
     fi
-    if ! cron_service_is_active && command -v service >/dev/null 2>&1; then
-        service cron start >/dev/null 2>&1 || service crond start >/dev/null 2>&1 || true
-    fi
-    if ! cron_service_is_active && command -v crond >/dev/null 2>&1; then
-        crond >/dev/null 2>&1 || true
-    fi
+    # 无 init 的精简容器同时兼容 Debian cron 和 BusyBox/cronie crond。
+    daemon=$(_cron_daemon_path) || return 1
+    "$daemon" || return 1
+    _warn "当前环境没有可用的服务管理器，cron 已直接启动；重启后的自动启动需由宿主环境配置"
+}
 
-    cron_service_is_active
+ensure_cron_service_running() {
+    local allow_install="${1:-false}" log_file="$CFG/cron-service.log" attempt
+    if cron_service_is_active && command -v crontab >/dev/null 2>&1; then return 0; fi
+    mkdir -p "$CFG" || return 1
+    (umask 077; touch "$log_file") && chmod 600 "$log_file" || return 1
+    printf '\n=== %s cron 检查 ===\n' "$(date '+%Y-%m-%d %H:%M:%S')" >> "$log_file"
+    if ! _cron_daemon_path >/dev/null || ! command -v crontab >/dev/null 2>&1; then
+        if [[ "$allow_install" != true ]]; then
+            _err "cron 组件缺失，请在菜单中重新启用以安装依赖"
+            return 1
+        fi
+        _info "安装缺失的 cron 守护程序..."
+        if ! _install_cron_daemon >> "$log_file" 2>&1; then
+            _err "cron 安装失败，请查看 $log_file"
+            return 1
+        fi
+    fi
+    if _start_cron_service >> "$log_file" 2>&1; then
+        for attempt in 1 2 3; do
+            cron_service_is_active && return 0
+            sleep 1
+        done
+    fi
+    if cron_service_is_active; then return 0; fi
+    _err "cron 启动失败，请查看 ${log_file}（检查服务是否被屏蔽、权限及系统限制）"
+    return 1
 }
 
 install_cron_entry() {
@@ -3248,6 +3441,7 @@ setup_traffic_cron() {
     log_file="$CFG/traffic-sync.log"
     cron_cmd="$(build_cron_command "*/$interval * * * *" "$script_path" "--sync-traffic" "$log_file") # sync-traffic"
 
+    ensure_cron_service_running "$([[ "$silent" == true ]] && echo false || echo true)" || return 1
     if install_cron_entry "sync-traffic" "$cron_cmd"; then
         set_traffic_interval "$interval"
         if ! ensure_cron_service_running; then
@@ -3272,6 +3466,26 @@ remove_traffic_cron() {
     _ok "已移除流量统计定时任务"
 }
 
+# 公网 IP 变更检测定时任务（每 30 分钟）
+setup_ip_check_cron() {
+    local script_path="/usr/local/bin/vless-server.sh"
+    [[ -x "$script_path" ]] || script_path=$(readlink -f "$0")
+    [[ -x "$script_path" ]] || return 1
+    local cron_cmd
+    cron_cmd="$(build_cron_command "*/30 * * * *" "$script_path" "--check-ip" "$CFG/ip-check.log") # check-ip"
+    ensure_cron_service_running false || return 1
+    install_cron_entry "check-ip" "$cron_cmd"
+}
+
+remove_ip_check_cron() {
+    remove_cron_entry "check-ip"
+}
+
+_has_installed_protocols() {
+    [[ -f "$DB_FILE" ]] || return 1
+    jq -e '[(.xray // {}), (.singbox // {}) | keys[]] | length > 0' "$DB_FILE" >/dev/null 2>&1
+}
+
 setup_tg_user_bot_cron() {
     local silent="${1:-false}"
     local script_path="/usr/local/bin/vless-server.sh"
@@ -3283,6 +3497,7 @@ setup_tg_user_bot_cron() {
     log_file="$CFG/tg-user-bot.log"
     cron_cmd="$(build_cron_command "* * * * *" "$script_path" "--tg-bot-poll" "$log_file") # tg-user-bot"
 
+    ensure_cron_service_running "$([[ "$silent" == true ]] && echo false || echo true)" || return 1
     if install_cron_entry "tg-user-bot" "$cron_cmd"; then
         if ! ensure_cron_service_running; then
             [[ "$silent" == "true" ]] || _err "机器人规则已写入，但 cron 服务未运行"
@@ -3312,6 +3527,9 @@ repair_scheduled_jobs() {
         setup_tg_user_bot_cron "true" || \
             _log "WARN" "TG 用户机器人定时任务自动修复失败"
     fi
+    if [[ ! -f "$CFG/ip-check.disabled" ]] && _has_installed_protocols; then
+        setup_ip_check_cron || _log "WARN" "公网 IP 检测定时任务自动修复失败"
+    fi
 }
 
 get_traffic_monthly_reset_enabled() {
@@ -3332,24 +3550,25 @@ set_traffic_monthly_reset_day() {
 
 reset_monthly_user_traffic() {
     [[ ! -f "$DB_FILE" ]] && return 0
-    local month_key
+    local month_key core proto user failed=0 staged
     month_key=$(date +%Y-%m)
-    echo "$month_key" > "$TRAFFIC_MONTHLY_RESET_LAST_FILE"
-
-    _db_apply '
-      if .xray then
-        .xray |= with_entries(
-          .value |= (
-            if type == "array" then
-              map(if .users then .users |= map(.used = 0 | .enabled = true | del(.alert.last_alert_percent, .alert.quota_exceeded_notified)) else . end)
-            else
-              if .users then .users |= map(.used = 0 | .enabled = true | del(.alert.last_alert_percent, .alert.quota_exceeded_notified)) else . end
-            end
-          )
-        )
-      else . end
-    '
-    _ok "已按月重置 Xray 用户流量"
+    for core in xray singbox; do
+        for proto in $(db_list_protocols "$core"); do
+            for user in $(db_list_users "$core" "$proto"); do
+                db_reset_user_traffic "$core" "$proto" "$user" "$month_key" || failed=1
+            done
+        done
+    done
+    if [[ "$failed" != 0 ]]; then
+        _err "月度流量重置或用户恢复未全部完成，下次同步将重试"
+        return 1
+    fi
+    staged=$(mktemp "${TRAFFIC_MONTHLY_RESET_LAST_FILE}.XXXXXX") || return 1
+    if ! printf '%s\n' "$month_key" > "$staged" || ! mv "$staged" "$TRAFFIC_MONTHLY_RESET_LAST_FILE"; then
+        rm -f "$staged"
+        return 1
+    fi
+    _ok "已按月重置 Xray / Sing-box / Snell 用户流量，超额停用用户已恢复"
 }
 
 check_monthly_traffic_reset() {
@@ -4786,6 +5005,43 @@ _add_single_xray_inbound() {
 }
 
 # 使用 jq 动态构建 inbound (重构版 - 只从数据库读取)
+# 普通 AEAD SS 的多用户配置不能复用 SS2022 的服务端密钥模型。
+# 只消费当前端口实例；显式空用户列表绝不能回退到原始密码。
+_ss_legacy_active_users() {
+    local cfg="$1" disabled_secret
+    disabled_secret=$(openssl rand -hex 32) || return 1
+    jq --arg today "$(date '+%Y-%m-%d')" --arg disabled "$disabled_secret" '
+        (if .users == null then [{name:"default", uuid:.password}]
+         else .users end) |
+        map(select(.enabled != false)
+            | select((.quota // 0) == 0 or (.used // 0) < .quota)
+            | select((.expire_date // "") == "" or .expire_date >= $today)
+            | {name:.name, password:.uuid}) |
+        if length == 0 then [{name:"disabled", password:$disabled}] else . end
+    ' <<< "$cfg"
+}
+
+_ss_legacy_xray_settings() {
+    local users
+    users=$(_ss_legacy_active_users "$1") || return 1
+    jq --argjson users "$users" '
+        .method as $method |
+        {network:"tcp,udp", clients:($users | map({
+            method:$method, password:.password, email:(.name + "@ss-legacy"), level:0
+        }))}
+    ' <<< "$1"
+}
+
+_ss_legacy_singbox_inbound() {
+    local users
+    users=$(_ss_legacy_active_users "$1") || return 1
+    jq --arg listen "$2" --argjson users "$users" '{
+        type:"shadowsocks", tag:("ss-legacy-in-" + (.port|tostring)),
+        listen:$listen, listen_port:(.port|tonumber), method:.method,
+        users:($users | map({name:("ss-legacy-" + .name), password:.password}))
+    }' <<< "$1"
+}
+
 add_xray_inbound_v2() {
     local protocol=$1
     
@@ -4891,7 +5147,7 @@ add_xray_inbound_v2() {
             if [[ "$security_mode" == "encryption" ]]; then
                 local decryption=$(echo "$cfg" | jq -r '.decryption // "none"')
                 local clients=$(gen_xray_vless_clients "$base_protocol" "" "$port")
-                [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\"}]"
+                [[ -n "$clients" ]] || return 1
 
                 jq -n \
                     --argjson port "$port" \
@@ -4918,7 +5174,7 @@ add_xray_inbound_v2() {
                 # VLESS+Reality - 使用 jq 安全构建 (支持 WS 回落)
                 # 获取完整的用户列表（包含子用户和 email，用于流量统计）
                 local clients=$(gen_xray_vless_clients "$base_protocol" "xtls-rprx-vision" "$port")
-                [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\",\"flow\":\"xtls-rprx-vision\"}]"
+                [[ -n "$clients" ]] || return 1
                 
                 jq -n \
                     --argjson port "$port" \
@@ -4960,7 +5216,7 @@ add_xray_inbound_v2() {
             # VLESS-Vision - 使用 jq 安全构建
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             local clients=$(gen_xray_vless_clients "$base_protocol" "xtls-rprx-vision" "$port")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\",\"flow\":\"xtls-rprx-vision\"}]"
+            [[ -n "$clients" ]] || return 1
             
             jq -n \
                 --argjson port "$port" \
@@ -4996,7 +5252,7 @@ add_xray_inbound_v2() {
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             # vless-ws 不需要 flow
             local clients=$(gen_xray_vless_clients "$base_protocol" "" "$port")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\"}]"
+            [[ -n "$clients" ]] || return 1
             
             if [[ "$has_master" == "true" ]]; then
                 # 回落模式：监听本地
@@ -5056,7 +5312,7 @@ add_xray_inbound_v2() {
         vless-ws-notls)
             # VLESS-WS 无 TLS - 专为 CF Tunnel 设计
             local clients=$(gen_xray_vless_clients "$base_protocol" "" "$port")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\"}]"
+            [[ -n "$clients" ]] || return 1
             
             # 从数据库获取 host 配置
             local host=$(db_get_field "xray" "$base_protocol" "host")
@@ -5086,7 +5342,7 @@ add_xray_inbound_v2() {
         vless-xhttp)
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             local clients=$(gen_xray_vless_clients "$base_protocol" "" "$port")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\"}]"
+            [[ -n "$clients" ]] || return 1
             
             jq -n \
                 --argjson port "$port" \
@@ -5127,7 +5383,7 @@ add_xray_inbound_v2() {
             
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             local clients=$(gen_xray_vless_clients "$base_protocol" "" "$port")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\"}]"
+            [[ -n "$clients" ]] || return 1
             
             jq -n \
                 --argjson port "$internal_port" \
@@ -5151,7 +5407,7 @@ add_xray_inbound_v2() {
         vmess-ws)
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             local clients=$(gen_xray_vmess_clients "$base_protocol")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"id\":\"$uuid\",\"email\":\"default@${base_protocol}\",\"alterId\":0}]"
+            [[ -n "$clients" ]] || return 1
             
             if [[ "$has_master" == "true" ]]; then
                 jq -n \
@@ -5203,7 +5459,7 @@ add_xray_inbound_v2() {
         trojan)
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             local clients=$(gen_xray_trojan_clients "$base_protocol")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"password\":\"$password\",\"email\":\"default@${base_protocol}\"}]"
+            [[ -n "$clients" ]] || return 1
             
             jq -n \
                 --argjson port "$port" \
@@ -5235,7 +5491,7 @@ add_xray_inbound_v2() {
             
             # 获取完整的用户列表（包含子用户和 email，用于流量统计）
             local clients=$(gen_xray_trojan_clients "$base_protocol")
-            [[ -z "$clients" || "$clients" == "[]" ]] && clients="[{\"password\":\"$password\",\"email\":\"default@${base_protocol}\"}]"
+            [[ -n "$clients" ]] || return 1
             
             # Trojan-WS 作为回落协议或独立运行
             if _has_master_protocol; then
@@ -5345,7 +5601,14 @@ add_xray_inbound_v2() {
                 }' > "$tmp_inbound"
             fi
             ;;
-        ss2022|ss-legacy)
+        ss-legacy)
+            local ss_settings
+            ss_settings=$(_ss_legacy_xray_settings "$cfg") || return 1
+            jq -n --argjson port "$port" --arg tag "$inbound_tag" \
+                --arg listen_addr "$listen_addr" --argjson settings "$ss_settings" \
+                '{port:$port, listen:$listen_addr, protocol:"shadowsocks", settings:$settings, tag:$tag}' > "$tmp_inbound"
+            ;;
+        ss2022)
             jq -n \
                 --argjson port "$port" \
                 --arg method "$method" \
@@ -5815,21 +6078,28 @@ sync_time() {
 # 指定地址族探测公网 IP，并严格校验返回值的地址类型。
 # DNS64/NAT64 可能让 curl -6 连接成功，但探测站返回 NAT64
 # 出口的 IPv4；此时必须拒绝该结果，否则会生成 [1.2.3.4] 这类无效地址。
-_probe_public_ip() {
-    local family="$1" endpoint result
-    for endpoint in "https://ip.sb" "https://ifconfig.me"; do
-        result=$(curl "-$family" -sf --connect-timeout 5 --max-time 8 "$endpoint" 2>/dev/null) || continue
-        result=$(printf '%s' "$result" | tr -d '[:space:]')
-        result="${result#[}"
-        result="${result%]}"
+PUBLIC_IP_ENDPOINTS="https://ip.sb https://ifconfig.me"
 
-        if [[ "$family" == "4" ]]; then
-            _is_valid_ipv4_literal "$result" || continue
-        else
-            _is_valid_ipv6_literal "$result" || continue
-        fi
-        printf '%s\n' "$result"
-        return 0
+# 用单个探测站探测公网 IP，返回值必须是对应地址族的合法字面量。
+_probe_public_ip_from() {
+    local family="$1" endpoint="$2" result
+    result=$(curl "-$family" -sf --connect-timeout 5 --max-time 8 "$endpoint" 2>/dev/null) || return 1
+    result=$(printf '%s' "$result" | tr -d '[:space:]')
+    result="${result#[}"
+    result="${result%]}"
+
+    if [[ "$family" == "4" ]]; then
+        _is_valid_ipv4_literal "$result" || return 1
+    else
+        _is_valid_ipv6_literal "$result" || return 1
+    fi
+    printf '%s\n' "$result"
+}
+
+_probe_public_ip() {
+    local family="$1" endpoint
+    for endpoint in $PUBLIC_IP_ENDPOINTS; do
+        _probe_public_ip_from "$family" "$endpoint" && return 0
     done
     return 1
 }
@@ -5885,6 +6155,205 @@ get_connection_addresses() {
         ipv6=$(get_local_ipv6)
     fi
     printf '%s|%s\n' "$ipv4" "$ipv6"
+}
+
+#═══════════════════════════════════════════════════════════════════════════════
+# 公网 IP 变更检测（定时任务每 30 分钟执行 --check-ip）
+#═══════════════════════════════════════════════════════════════════════════════
+# 状态文件：
+#   public_ip          上次确认的地址，格式 ipv4|ipv6
+#   public_ip.pending  只有一个探测站给出、尚未确认的新地址，每行 族|地址
+#   ip-check.disabled  存在时关闭自动检测（出口 IP 不等于入口 IP 的机器）
+#   ip-changed.notice  变更说明，打开主菜单时显示一次
+
+_get_pending_ip() {
+    local family="$1"
+    [[ -f "$CFG/public_ip.pending" ]] || return 0
+    awk -F'|' -v f="$family" '$1 == f {print $2; exit}' "$CFG/public_ip.pending"
+}
+
+_set_pending_ip() {
+    local family="$1" value="$2" file="$CFG/public_ip.pending" rest=""
+    [[ -f "$file" ]] && rest=$(awk -F'|' -v f="$family" '$1 != f' "$file")
+    {
+        [[ -n "$rest" ]] && printf '%s\n' "$rest"
+        [[ -n "$value" ]] && printf '%s|%s\n' "$family" "$value"
+    } > "$file.tmp"
+    if [[ -s "$file.tmp" ]]; then
+        mv "$file.tmp" "$file"
+    else
+        rm -f "$file.tmp" "$file"
+    fi
+}
+
+# 输出确认后的新地址；地址未变、探测失败或尚未确认时输出空。
+# 两个探测站结果一致才直接确认；只有一个结果或结果不一致时，
+# 需要下一次检测得到同一地址才确认，避免探测站异常导致误改。
+_confirm_public_ip() {
+    local family="$1" recorded="$2" endpoint addr results=() pending
+    for endpoint in $PUBLIC_IP_ENDPOINTS; do
+        addr=$(_probe_public_ip_from "$family" "$endpoint") && results+=("$addr")
+    done
+    (( ${#results[@]} )) || return 0
+    for addr in "${results[@]}"; do
+        if [[ "$addr" == "$recorded" ]]; then
+            _set_pending_ip "$family" ""
+            return 0
+        fi
+    done
+    if (( ${#results[@]} >= 2 )) && [[ "${results[0]}" == "${results[1]}" ]]; then
+        _set_pending_ip "$family" ""
+        printf '%s\n' "${results[0]}"
+        return 0
+    fi
+    pending=$(_get_pending_ip "$family")
+    for addr in "${results[@]}"; do
+        if [[ -n "$pending" && "$addr" == "$pending" ]]; then
+            _set_pending_ip "$family" ""
+            printf '%s\n' "$addr"
+            return 0
+        fi
+    done
+    _set_pending_ip "$family" "${results[0]}"
+}
+
+# 上次确认的地址；首次运行时以数据库中保存的地址为基准。
+_recorded_public_ip() {
+    if [[ -s "$CFG/public_ip" ]]; then
+        head -n 1 "$CFG/public_ip"
+        return 0
+    fi
+    [[ -f "$DB_FILE" ]] || { echo "|"; return 0; }
+    jq -r '
+        def first_ip(f): [(.xray, .singbox) | .. | objects | .[f]? | strings | select(. != "")][0] // "";
+        "\(first_ip("ipv4"))|\(first_ip("ipv6"))"' "$DB_FILE" 2>/dev/null || echo "|"
+}
+
+# 按字面替换文本中的地址，前后紧邻地址字符时不替换（避免 1.2.3.4 命中 11.2.3.45）。
+_replace_ip_literal() {
+    local text="$1" old="$2" new="$3" family="$4" out="" before c1 c2
+    local cls_before='[0-9.]' cls_after='[0-9]'
+    [[ "$family" == 6 ]] && { cls_before='[0-9A-Fa-f:]'; cls_after='[0-9A-Fa-f:]'; }
+    [[ -n "$old" ]] || { printf '%s' "$text"; return 0; }
+    while [[ "$text" == *"$old"* ]]; do
+        before=${text%%"$old"*}
+        text=${text#*"$old"}
+        c1=${before: -1}
+        c2=${text:0:1}
+        if [[ "$c1" =~ $cls_before || "$c2" =~ $cls_after ]]; then
+            out+="$before$old"
+        else
+            out+="$before$new"
+        fi
+    done
+    printf '%s' "$out$text"
+}
+
+# 把 .join 文件中的旧地址换成新地址，JOIN_V4/JOIN_V6 行先解码再替换。
+_replace_ip_in_join_files() {
+    local family="$1" old="$2" new="$3" file tmp line key value decoded
+    for file in "$CFG"/*.join "$CFG/join.txt"; do
+        [[ -f "$file" ]] || continue
+        tmp=$(mktemp "$file.XXXXXX") || return 1
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" =~ ^(JOIN_V[46])=(.+)$ ]]; then
+                key=${BASH_REMATCH[1]}
+                value=${BASH_REMATCH[2]}
+                if decoded=$(printf '%s' "$value" | base64 -d 2>/dev/null) && [[ -n "$decoded" ]]; then
+                    decoded=$(_replace_ip_literal "$decoded" "$old" "$new" "$family")
+                    value=$(printf '%s' "$decoded" | base64 -w 0 2>/dev/null || printf '%s' "$decoded" | base64 | tr -d '\n')
+                fi
+                line="$key=$value"
+            else
+                line=$(_replace_ip_literal "$line" "$old" "$new" "$family")
+            fi
+            printf '%s\n' "$line"
+        done < "$file" > "$tmp"
+        chmod 600 "$tmp" && mv "$tmp" "$file" || { rm -f "$tmp"; return 1; }
+    done
+}
+
+_apply_public_ip_change() {
+    local family="$1" old="$2" new="$3" field="ipv4"
+    [[ "$family" == 6 ]] && field="ipv6"
+    _db_apply --arg f "$field" --arg old "$old" --arg new "$new" \
+        '((.xray, .singbox) | .. | select(type == "object" and .[$f] == $old) | .[$f]) |= $new' || {
+        _log "ERROR" "公网 IP 变更写入数据库失败: $old -> $new"
+        return 1
+    }
+    _replace_ip_in_join_files "$family" "$old" "$new"
+}
+
+_write_ip_change_notice() {
+    local new4="$1" new6="$2"; shift 2
+    local line sub_uuid="" sub_port="" sub_domain="" sub_https="" scheme="http" host
+    {
+        echo "$(date '+%Y-%m-%d %H:%M:%S') 检测到服务器公网 IP 变化："
+        for line in "$@"; do echo "  $line"; done
+        echo "  节点信息、分享链接和 JOIN 文件已更新为新地址。"
+        if [[ -f "$CFG/sub.info" ]] && _load_sub_info "$CFG/sub.info" 2>/dev/null; then
+            echo "  订阅文件已重新生成。"
+            if [[ -z "$sub_domain" ]]; then
+                [[ "$sub_https" == "true" ]] && scheme="https"
+                host="$new4"
+                [[ -z "$host" && -n "$new6" ]] && host="[$new6]"
+                echo "  订阅链接中的地址已变化，请在客户端改用新的订阅链接："
+                echo "  ${scheme}://${host}:${sub_port}/sub/${sub_uuid}/clash"
+            fi
+        else
+            echo "  客户端里保存的节点地址需要手动更新。"
+        fi
+    } >> "$CFG/ip-changed.notice"
+}
+
+# 检测公网 IP 是否变化，变化时更新数据库、JOIN 文件和订阅文件。
+check_public_ip_change() {
+    [[ -f "$CFG/ip-check.disabled" ]] && return 0
+    [[ -f "$DB_FILE" ]] || return 0
+    local old4 old6 new4="" new6="" changes=()
+    IFS='|' read -r old4 old6 <<< "$(_recorded_public_ip)"
+
+    if [[ -z "$old4" && -z "$old6" ]]; then
+        # 还没有任何基准地址：只记录当前地址，不做替换。
+        local cur4 cur6
+        cur4=$(get_ipv4); cur6=$(get_ipv6)
+        [[ -n "$cur4$cur6" ]] && printf '%s|%s\n' "$cur4" "$cur6" > "$CFG/public_ip"
+        return 0
+    fi
+
+    [[ -n "$old4" ]] && new4=$(_confirm_public_ip 4 "$old4")
+    [[ -n "$old6" ]] && new6=$(_confirm_public_ip 6 "$old6")
+
+    if [[ -n "$new4" ]]; then
+        _apply_public_ip_change 4 "$old4" "$new4" || return 1
+        changes+=("IPv4: $old4 -> $new4")
+        old4="$new4"
+        _CACHED_IPV4="$new4"
+    fi
+    if [[ -n "$new6" ]]; then
+        _apply_public_ip_change 6 "$old6" "$new6" || return 1
+        changes+=("IPv6: $old6 -> $new6")
+        old6="$new6"
+        _CACHED_IPV6="$new6"
+    fi
+    printf '%s|%s\n' "$old4" "$old6" > "$CFG/public_ip"
+    (( ${#changes[@]} )) || return 0
+
+    [[ -f "$CFG/sub.info" ]] && generate_sub_files >/dev/null 2>&1
+    _write_ip_change_notice "$old4" "$old6" "${changes[@]}"
+    _log "INFO" "公网 IP 变化: ${changes[*]}"
+    printf '%s\n' "${changes[@]}"
+}
+
+# 打开主菜单时显示一次 IP 变更提示
+show_ip_change_notice() {
+    [[ -s "$CFG/ip-changed.notice" ]] || return 0
+    _line
+    echo -e "  ${Y}服务器公网 IP 已变化${NC}" >&2
+    sed 's/^/  /' "$CFG/ip-changed.notice" >&2
+    _line
+    rm -f "$CFG/ip-changed.notice"
+    _pause
 }
 
 # 公网地址不是安装代理核心的必要条件。无公网服务器仍可通过内网、NAT
@@ -6897,11 +7366,13 @@ get_ip_suffix() {
 # 分享链接生成
 #═══════════════════════════════════════════════════════════════════════════════
 
+# mihomo >= v1.19.31 从链接读取 support-x25519mlkem768；Xray >= 26.9.9 的 REALITY
+# 服务端要求客户端带 ML-KEM，否则当作普通访问回落。其他客户端会忽略该参数。
 gen_vless_link() {
     local ip="$1" port="$2" uuid="$3" pbk="$4" sid="$5" sni="$6" country="${7:-}"
     local ip_suffix=$(get_ip_suffix "$ip")
     local name="${country:+${country}-}VLESS+Reality${ip_suffix:+-${ip_suffix}}"
-    printf '%s\n' "vless://${uuid}@${ip}:${port}?encryption=none&security=reality&type=tcp&sni=${sni}&fp=chrome&pbk=${pbk}&sid=${sid}&flow=xtls-rprx-vision#${name}"
+    printf '%s\n' "vless://${uuid}@${ip}:${port}?encryption=none&security=reality&type=tcp&sni=${sni}&fp=chrome&pbk=${pbk}&sid=${sid}&support-x25519mlkem768=true&flow=xtls-rprx-vision#${name}"
 }
 
 gen_vless_encryption_link() {
@@ -6915,7 +7386,7 @@ gen_vless_xhttp_link() {
     local ip="$1" port="$2" uuid="$3" pbk="$4" sid="$5" sni="$6" path="${7:-/}" country="${8:-}"
     local ip_suffix=$(get_ip_suffix "$ip")
     local name="${country:+${country}-}VLESS-XHTTP${ip_suffix:+-${ip_suffix}}"
-    printf '%s\n' "vless://${uuid}@${ip}:${port}?encryption=none&security=reality&type=xhttp&sni=${sni}&fp=chrome&pbk=${pbk}&sid=${sid}&path=$(urlencode "$path")&mode=auto#${name}"
+    printf '%s\n' "vless://${uuid}@${ip}:${port}?encryption=none&security=reality&type=xhttp&sni=${sni}&fp=chrome&pbk=${pbk}&sid=${sid}&support-x25519mlkem768=true&path=$(urlencode "$path")&mode=auto#${name}"
 }
 
 gen_vless_xhttp_cdn_link() {
@@ -11091,6 +11562,28 @@ _build_singbox_ruleset_defs() {
 }
 
 # 生成 Sing-box 统一配置（所有选用 Sing-box 的协议共用一个进程）
+_singbox_effective_users() {
+    local proto="$1" cfg="$2" nonce
+    nonce=$(openssl rand -hex 16) || return 1
+    nonce="${nonce:0:8}-${nonce:8:4}-${nonce:12:4}-${nonce:16:4}-${nonce:20:12}"
+    jq -ce --arg p "$proto" --arg nonce "$nonce" --arg today "$(date +%F)" '
+        . as $r |
+        (if .users == null then
+            [{name:"default",uuid:(if $p=="vless" or $p=="tuic" then .uuid else .password end)}]
+         else .users end) |
+        map(select(.enabled != false) |
+            select((.quota // 0) == 0 or (.used // 0) < .quota) |
+            select((.expire_date // "") == "" or .expire_date >= $today)) |
+        map(if $p=="vless" then {name:($p+"-"+.name),uuid:.uuid,flow:"xtls-rprx-vision"}
+            elif $p=="tuic" then {name:($p+"-"+.name),uuid:.uuid,password:(.password // $r.password)}
+            else {name:($p+"-"+.name),password:.uuid} end) |
+        if length > 0 then . else
+            [if $p=="vless" then {name:"quota-disabled",uuid:$nonce,flow:"xtls-rprx-vision"}
+             elif $p=="tuic" then {name:"quota-disabled",uuid:$nonce,password:$nonce}
+             else {name:"quota-disabled",password:$nonce} end]
+        end' <<< "$cfg"
+}
+
 generate_singbox_config() {
     _ensure_singbox_default_users
     local singbox_protocols=$(db_list_protocols "singbox")
@@ -11490,21 +11983,27 @@ generate_singbox_config() {
                 local private_key=$(echo "$cfg" | jq -r '.private_key // empty')
                 local short_id=$(echo "$cfg" | jq -r '.short_id // empty')
                 local sni=$(echo "$cfg" | jq -r '.sni // "www.microsoft.com"')
+                # 握手目标与 Xray 的 Reality dest 保持一致：真实证书模式下回落到本机 Nginx
+                local hs_server="$sni" hs_port=443 cert_domain=""
+                [[ -f "$CFG/cert_domain" ]] && cert_domain=$(cat "$CFG/cert_domain")
+                if [[ -n "$cert_domain" && "$sni" == "$cert_domain" ]] && _is_real_cert; then
+                    hs_server="127.0.0.1"
+                    hs_port=8443
+                    _ensure_nginx_https_for_reality "$cert_domain"
+                fi
                 local users_json
-                users_json=$(echo "$cfg" | jq --arg uuid "$uuid" '
-                    [(.users // [])[] | select(.enabled // true) |
-                        {name:("vless-" + .name), uuid:.uuid, flow:"xtls-rprx-vision"}] |
-                    if length == 0 then [{name:"vless-default", uuid:$uuid, flow:"xtls-rprx-vision"}] else . end')
+                users_json=$(_singbox_effective_users "$proto" "$cfg") || return 1
                 inbound=$(jq -n \
                     --argjson port "$port" --argjson users "$users_json" \
                     --arg private_key "$private_key" --arg short_id "$short_id" \
+                    --arg hs_server "$hs_server" --argjson hs_port "$hs_port" \
                     --arg sni "$sni" --arg listen_addr "$listen_addr" --arg tag "vless-in-${port}" '
                     {
                         type:"vless", tag:$tag, listen:$listen_addr,
                         listen_port:$port, users:$users,
                         tls:{enabled:true, server_name:$sni, reality:{
                             enabled:true,
-                            handshake:{server:$sni, server_port:443},
+                            handshake:{server:$hs_server, server_port:$hs_port},
                             private_key:$private_key,
                             short_id:[$short_id]
                         }}
@@ -11514,10 +12013,7 @@ generate_singbox_config() {
                 local password=$(echo "$cfg" | jq -r '.password // empty')
                 local sni=$(echo "$cfg" | jq -r '.sni // "bing.com"')
                 local users_json
-                users_json=$(echo "$cfg" | jq --arg password "$password" '
-                    [(.users // [])[] | select(.enabled // true) |
-                        {name:("trojan-" + .name), password:.uuid}] |
-                    if length == 0 then [{name:"trojan-default", password:$password}] else . end')
+                users_json=$(_singbox_effective_users "$proto" "$cfg") || return 1
                 inbound=$(jq -n \
                     --argjson port "$port" --argjson users "$users_json" \
                     --arg cert "$CFG/certs/server.crt" --arg key "$CFG/certs/server.key" \
@@ -11528,7 +12024,10 @@ generate_singbox_config() {
                         tls:{enabled:true, certificate_path:$cert, key_path:$key}
                     }')
                 ;;
-            ss2022|ss-legacy)
+            ss-legacy)
+                inbound=$(_ss_legacy_singbox_inbound "$cfg" "$listen_addr") || return 1
+                ;;
+            ss2022)
                 local password=$(echo "$cfg" | jq -r '.password // empty')
                 local method=$(echo "$cfg" | jq -r '.method // empty')
                 inbound=$(jq -n \
@@ -11555,27 +12054,9 @@ generate_singbox_config() {
                     fi
                 fi
                 
-                # 构建用户列表：从数据库读取用户，如果没有则使用默认用户
-                local users_json="[]"
-                local db_users=$(jq -r --arg p "$proto" '
-                    .singbox[$p] as $cfg |
-                    if $cfg == null then empty
-                    elif ($cfg | type) == "array" then
-                        [$cfg[].users // [] | .[]] | unique_by(.name)
-                    else
-                        $cfg.users // []
-                    end
-                ' "$DB_FILE" 2>/dev/null)
-                
-                if [[ -n "$db_users" && "$db_users" != "[]" && "$db_users" != "null" ]]; then
-                    # 有自定义用户，为每个用户生成 {name, password}
-                    # hy2 用户的 uuid 字段存储的是密码；name 使用协议隔离后的内部统计键
-                    local default_user_json=$(jq -n --arg name "hy2-default" --arg pw "$password" '{name: $name, password: $pw}')
-                    users_json=$(jq -n --argjson db_users "$db_users" --argjson chk_def "$default_user_json" '([$chk_def] + ($db_users | map({name: ("hy2-" + .name), password: .uuid}))) | unique_by(.name)')
-                else
-                    # 没有自定义用户，使用默认密码
-                    users_json=$(jq -n --arg name "hy2-default" --arg pw "$password" '[{name: $name, password: $pw}]')
-                fi
+                # Only this port's eligible users; never restore disabled default credentials.
+                local users_json
+                users_json=$(_singbox_effective_users "$proto" "$cfg") || return 1
                 
                 inbound=$(jq -n \
                     --argjson port "$port" \
@@ -11609,25 +12090,9 @@ generate_singbox_config() {
                 local key_path="$CFG/certs/tuic/server.key"
                 [[ ! -f "$cert_path" ]] && { cert_path="$CFG/certs/server.crt"; key_path="$CFG/certs/server.key"; }
                 
-                # 构建用户列表：从数据库读取用户，如果没有则使用默认用户
-                local users_json="[]"
-                local db_users=$(jq -r --arg p "$proto" '
-                    .singbox[$p] as $cfg |
-                    if $cfg == null then empty
-                    elif ($cfg | type) == "array" then
-                        [$cfg[].users // [] | .[]] | unique_by(.name)
-                    else
-                        $cfg.users // []
-                    end
-                ' "$DB_FILE" 2>/dev/null)
-                
-                if [[ -n "$db_users" && "$db_users" != "[]" && "$db_users" != "null" ]]; then
-                    # TUIC 用户的 uuid 字段存储的是真正用户 UUID；name 使用协议隔离后的内部统计键
-                    local default_user_json=$(jq -n --arg name "tuic-default" --arg id "$uuid" --arg pw "$password" '{name: $name, uuid: $id, password: $pw}')
-                    users_json=$(jq -n --argjson db_users "$db_users" --argjson chk_def "$default_user_json" --arg pw "$password" '([$chk_def] + ($db_users | map({name: ("tuic-" + .name), uuid: .uuid, password: $pw}))) | unique_by(.name)')
-                else
-                    users_json=$(jq -n --arg name "tuic-default" --arg id "$uuid" --arg pw "$password" '[{name: $name, uuid: $id, password: $pw}]')
-                fi
+                # Only this port's eligible users; never restore disabled default credentials.
+                local users_json
+                users_json=$(_singbox_effective_users "$proto" "$cfg") || return 1
                 
                 inbound=$(jq -n \
                     --argjson port "$port" \
@@ -11658,25 +12123,9 @@ generate_singbox_config() {
                 local key_path="$CFG/certs/server.key"
                 [[ ! -f "$cert_path" || ! -f "$key_path" ]] && continue
 
-                # 构建用户列表：从数据库读取用户，如果没有则使用默认用户
-                local users_json="[]"
-                local db_users=$(jq -r --arg p "$proto" '
-                    .singbox[$p] as $cfg |
-                    if $cfg == null then empty
-                    elif ($cfg | type) == "array" then
-                        [$cfg[].users // [] | .[]] | unique_by(.name)
-                    else
-                        $cfg.users // []
-                    end
-                ' "$DB_FILE" 2>/dev/null)
-
-                if [[ -n "$db_users" && "$db_users" != "[]" && "$db_users" != "null" ]]; then
-                    # AnyTLS 用户的 uuid 字段存储的是真正用户密码；name 使用协议隔离后的内部统计键
-                    local default_user_json=$(jq -n --arg name "anytls-default" --arg pw "$password" '{name: $name, password: $pw}')
-                    users_json=$(jq -n --argjson db_users "$db_users" --argjson chk_def "$default_user_json" '([$chk_def] + ($db_users | map({name: ("anytls-" + .name), password: .uuid}))) | unique_by(.name)')
-                else
-                    users_json=$(jq -n --arg name "anytls-default" --arg pw "$password" '[{name: $name, password: $pw}]')
-                fi
+                # Only this port's eligible users; never restore disabled default credentials.
+                local users_json
+                users_json=$(_singbox_effective_users "$proto" "$cfg") || return 1
 
                 inbound=$(jq -n \
                     --argjson port "$port" \
@@ -13199,13 +13648,18 @@ get_all_services() {
     
     [[ ! -f "$DB_FILE" ]] && { echo ""; return; }
     
-    # 检查 Xray 协议
-    local xray_protos=$(jq -r '.xray | keys[]' "$DB_FILE" 2>/dev/null)
-    [[ -n "$xray_protos" ]] && services+="vless-reality:xray "
+    # 只有核心协议才由 vless-reality / vless-singbox 运行；Snell 等独立协议
+    # 虽记在 xray 下，但有自己的服务，不能据此拉起已无配置的核心服务。
+    # 协议列表由主脚本生成本文件时写入，与 XRAY_PROTOCOLS / SINGBOX_PROTOCOLS 一致。
+    local xray_core="__XRAY_PROTOCOLS__" singbox_core="__SINGBOX_PROTOCOLS__" p
+    for p in $(jq -r '.xray // {} | keys[]' "$DB_FILE" 2>/dev/null); do
+        [[ " $xray_core " == *" $p "* ]] && { services+="vless-reality:xray "; break; }
+    done
     
     # 所有 Sing-box 协议都由 vless-singbox 统一管理。
-    local singbox_protos=$(jq -r '.singbox | keys[]' "$DB_FILE" 2>/dev/null)
-    [[ -n "$singbox_protos" ]] && services+="vless-singbox:sing-box "
+    for p in $(jq -r '.singbox // {} | keys[]' "$DB_FILE" 2>/dev/null); do
+        [[ " $singbox_core " == *" $p "* ]] && { services+="vless-singbox:sing-box "; break; }
+    done
     
     echo "$services"
 }
@@ -13225,6 +13679,7 @@ while true; do
     sleep 60
 done
 EOFSCRIPT
+    sed -i -e "s|__XRAY_PROTOCOLS__|$XRAY_PROTOCOLS|" -e "s|__SINGBOX_PROTOCOLS__|$SINGBOX_PROTOCOLS|" "$CFG/watchdog.sh"
 
     # Hysteria2 端口跳跃规则脚本 (服务端) - 从数据库读取
     if is_protocol_installed "hy2"; then
@@ -13350,6 +13805,18 @@ EOFSCRIPT
 #═══════════════════════════════════════════════════════════════════════════════
 # 服务管理
 #═══════════════════════════════════════════════════════════════════════════════
+# 旧版本生成的看门狗把记在 xray 下的独立协议也当作 Xray 协议，
+# 会反复拉起已无配置的 vless-reality；升级脚本后重写一次。
+_refresh_watchdog_script() {
+    [[ -f "$CFG/watchdog.sh" ]] || return 0
+    grep -q 'xray_core=' "$CFG/watchdog.sh" && return 0
+    create_server_scripts || return 1
+    if is_service_active vless-watchdog; then
+        svc restart vless-watchdog >/dev/null 2>&1 || _log "WARN" "Watchdog 重启失败"
+    fi
+    return 0
+}
+
 create_watchdog_service() {
     [[ -x "$CFG/watchdog.sh" ]] || { _warn "Watchdog 脚本不存在，跳过监控服务"; return 1; }
 
@@ -20106,8 +20573,15 @@ show_single_protocol_info() {
     local snell_mode=$(echo "$cfg" | jq -r '.mode // empty')
     local snell_tfo=$(echo "$cfg" | jq -r '.tfo // empty')
     
-    # 重新获取连接地址（数据库中的可能是旧的或由无公网旧版本写成空值）
-    if [[ -z "$ipv4" && -z "$ipv6" ]]; then
+    # 优先使用当前探测到的公网地址（数据库中的可能是 IP 变化前的旧值）；
+    # 公网探测失败时保留数据库值，仍为空才回落到本机接口地址。
+    local live_ipv4 live_ipv6
+    live_ipv4=$(get_ipv4)
+    live_ipv6=$(get_ipv6)
+    if [[ -n "$live_ipv4" || -n "$live_ipv6" ]]; then
+        ipv4="$live_ipv4"
+        ipv6="$live_ipv6"
+    elif [[ -z "$ipv4" && -z "$ipv6" ]]; then
         IFS='|' read -r ipv4 ipv6 <<< "$(get_connection_addresses)"
     fi
     
@@ -21378,6 +21852,7 @@ do_uninstall() {
     remove_cron_entry "tg-user-bot"
     remove_cron_entry "sync-traffic"
     remove_cron_entry "check-expire"
+    remove_cron_entry "check-ip"
     
     _info "删除服务文件..."
     if [[ "$DISTRO" == "alpine" ]]; then
@@ -22506,7 +22981,7 @@ do_install_server() {
                 esac
             done
             
-            local password=$(ask_password 16 "SS2022密码")
+            local password=$(ask_password 16 "SS密码")
             
             echo ""
             _line
@@ -23759,7 +24234,7 @@ fetch_subscription() {
                         vless)
                             local link="vless://${uuid}@${server}:${port}?encryption=none"
                             [[ -n "$flow" ]] && link+="&flow=$flow"
-                            [[ "$tls" == "true" ]] && link+="&security=reality&type=${network:-tcp}&sni=$sni&fp=chrome&pbk=$pbk&sid=$sid" || link+="&security=none&type=${network:-tcp}"
+                            [[ "$tls" == "true" ]] && link+="&security=reality&type=${network:-tcp}&sni=$sni&fp=chrome&pbk=$pbk&sid=$sid&support-x25519mlkem768=true" || link+="&security=none&type=${network:-tcp}"
                             [[ "$network" == "ws" ]] && link+="&type=ws&path=$(urlencode "$path")&host=$host"
                             link+="#$(urlencode "$name")"
                             links+="$link"$'\n'
@@ -23815,7 +24290,7 @@ fetch_subscription() {
                 vless)
                     local link="vless://${uuid}@${server}:${port}?encryption=none"
                     [[ -n "$flow" ]] && link+="&flow=$flow"
-                    [[ "$tls" == "true" ]] && link+="&security=reality&type=${network:-tcp}&sni=$sni&fp=chrome&pbk=$pbk&sid=$sid" || link+="&security=none&type=${network:-tcp}"
+                    [[ "$tls" == "true" ]] && link+="&security=reality&type=${network:-tcp}&sni=$sni&fp=chrome&pbk=$pbk&sid=$sid&support-x25519mlkem768=true" || link+="&security=none&type=${network:-tcp}"
                     link+="#$(urlencode "$name")"
                     links+="$link"$'\n'
                     ;;
@@ -23951,6 +24426,7 @@ external_link_to_clash() {
     reality-opts:
       public-key: $pbk
       short-id: $sid
+      support-x25519mlkem768: true
     client-fingerprint: chrome
 EOF
             elif [[ "$transport" == "ws" ]]; then
@@ -24786,6 +25262,7 @@ gen_clash_sub() {
     reality-opts:
       public-key: $public_key
       short-id: $short_id
+      support-x25519mlkem768: true
     client-fingerprint: chrome"
                 ;;
             vless-xhttp)
@@ -24804,6 +25281,7 @@ gen_clash_sub() {
     reality-opts:
       public-key: $public_key
       short-id: $short_id
+      support-x25519mlkem768: true
     client-fingerprint: chrome"
                 ;;
             vless-ws)
@@ -27367,7 +27845,9 @@ _gen_user_share_link() {
         vless-ws-notls) link=$(gen_vless_ws_notls_link "$server_addr" "$display_port" "$credential" "$path" "$host" "$remark") ;;
         vmess-ws) link=$(gen_vmess_ws_link "$server_addr" "$display_port" "$credential" "$sni" "$path" "$remark") ;;
         ss2022) link=$(gen_ss2022_link "$server_addr" "$display_port" "$method" "$credential" "$remark") ;;
-        ss-legacy) link=$(gen_ss_legacy_link "$server_addr" "$display_port" "$method" "$credential" "$remark") ;;
+        ss-legacy)
+            link=$(gen_ss_legacy_link "$server_addr" "$display_port" "$method" "$credential" "$remark")
+            ;;
         hy2) link=$(gen_hy2_link "$server_addr" "$display_port" "$credential" "$sni" "$remark") ;;
         trojan) link=$(gen_trojan_link "$server_addr" "$display_port" "$credential" "$sni" "$remark") ;;
         trojan-ws) link=$(gen_trojan_ws_link "$server_addr" "$display_port" "$credential" "$sni" "$path" "$remark") ;;
@@ -27994,10 +28474,11 @@ _reset_user_traffic() {
             read -rp "  确认重置所有用户流量? [y/N]: " confirm
             [[ ! "$confirm" =~ ^[yY]$ ]] && return
             
+            local reset_failed=0
             for user in $users; do
-                db_reset_user_traffic "$core" "$proto" "$user"
+                db_reset_user_traffic "$core" "$proto" "$user" || reset_failed=1
             done
-            _ok "所有用户流量已重置"
+            if [[ "$reset_failed" == 0 ]]; then _ok "所有用户流量已重置"; else _err "部分用户重置或恢复失败，请查看上方提示"; fi
             return
         fi
         
@@ -28168,6 +28649,11 @@ _set_user_expire_date() {
 # 更新 Xray/Sing-box 配置文件中的用户列表、用户级路由规则、链式代理和负载均衡并重载服务
 _regenerate_config() {
     local core="$1" proto="$2"
+    if [[ "$core" == "xray" && "$proto" == "ss-legacy" ]]; then
+        # SS 必须使用完整生成器，不能落入下面 VLESS clients 的局部更新。
+        rebuild_and_reload_xray
+        return $?
+    fi
     if _snell_managed "$proto"; then
         # Snell 数据库操作已处理对应实例，不能顺便启动其他手动停止的用户。
         return 0
@@ -28550,6 +29036,39 @@ _tg_unbind_user() {
     fi
 }
 
+_enable_tg_user_bot() {
+    local response bot_username
+    _info "验证 Telegram Bot Token..."
+    response=$(tg_bot_api_request "getMe") || { _err "Bot Token 验证请求失败"; return 1; }
+    jq -e '.ok == true' >/dev/null 2>&1 <<< "$response" || { _err "Bot Token 验证失败"; return 1; }
+    bot_username=$(jq -r '.result.username // empty' <<< "$response")
+    # 先确认本地轮询可运行，再切换 webhook，避免本地失败影响原来的机器人。
+    if ! setup_tg_user_bot_cron; then
+        tg_set_config "user_bot_enabled" "false"
+        return 1
+    fi
+    response=$(tg_bot_api_request "deleteWebhook" --data-urlencode "drop_pending_updates=false") || response=""
+    if ! jq -e '.ok == true' >/dev/null 2>&1 <<< "$response"; then
+        remove_tg_user_bot_cron
+        tg_set_config "user_bot_enabled" "false"
+        _err "切换 Telegram 轮询失败，用户机器人未启用"
+        return 1
+    fi
+    if ! tg_set_config "user_bot_enabled" "true"; then
+        remove_tg_user_bot_cron
+        _err "保存机器人启用状态失败"
+        return 1
+    fi
+    tg_bot_api_request "setMyCommands" --data-urlencode 'commands=[{"command":"traffic","description":"查询个人流量"},{"command":"status","description":"查询账号状态"},{"command":"bind","description":"绑定代理账号"},{"command":"unbind","description":"解除绑定"},{"command":"help","description":"查看帮助"}]' >/dev/null 2>&1 || true
+    _ok "用户机器人已启用${bot_username:+: @${bot_username}}"
+    if ! traffic_cron_entry_exists; then
+        setup_traffic_cron "$(get_traffic_interval)" || \
+            _warn "流量同步任务启用失败，机器人将显示数据库中的已有统计"
+    fi
+    return 0
+}
+
+
 _configure_tg_user_bot() {
     init_tg_config
     while true; do
@@ -28574,7 +29093,11 @@ _configure_tg_user_bot() {
         echo -e "  用户机器人: $bot_status"
         echo -e "  轮询任务: $cron_status"
         echo -e "  已绑定用户: ${G}$binding_count${NC}"
-        echo -e "  Bot Token: ${bot_token:+${G}复用管理员配置${NC}}${bot_token:-${D}未配置${NC}}"
+        if [[ -n "$bot_token" ]]; then
+            echo -e "  Bot Token: ${G}复用管理员配置（已隐藏）${NC}"
+        else
+            echo -e "  Bot Token: ${D}未配置${NC}"
+        fi
         [[ "$enabled" != "true" ]] && echo -e "  ${D}提示: 启用后使用 getUpdates 轮询，并移除该 Bot 的现有 webhook${NC}"
         _line
         if [[ "$enabled" == "true" ]]; then
@@ -28602,27 +29125,7 @@ _configure_tg_user_bot() {
                     if [[ -z "$bot_token" ]]; then
                         _err "请先在上级 TG 通知配置中设置 Bot Token"
                     else
-                        _info "验证 Telegram Bot Token..."
-                        response=$(tg_bot_api_request "getMe")
-                        if ! jq -e '.ok == true' >/dev/null 2>&1 <<< "$response"; then
-                            _err "Bot Token 验证失败"
-                        else
-                            bot_username=$(jq -r '.result.username // empty' <<< "$response")
-                            # getUpdates 与 webhook 不能同时使用；启用时切换到轮询模式。
-                            tg_bot_api_request "deleteWebhook" --data-urlencode "drop_pending_updates=false" >/dev/null 2>&1 || true
-                            tg_bot_api_request "setMyCommands" --data-urlencode 'commands=[{"command":"traffic","description":"查询个人流量"},{"command":"status","description":"查询账号状态"},{"command":"bind","description":"绑定代理账号"},{"command":"unbind","description":"解除绑定"},{"command":"help","description":"查看帮助"}]' >/dev/null 2>&1 || true
-                            tg_set_config "user_bot_enabled" "true"
-                            if setup_tg_user_bot_cron; then
-                                _ok "用户机器人已启用${bot_username:+: @${bot_username}}"
-                                if ! crontab -l 2>/dev/null | grep -q "sync-traffic"; then
-                                    _info "启用流量同步任务，供用户查询最新累计流量..."
-                                    setup_traffic_cron "$(get_traffic_interval)" || \
-                                        _warn "流量同步任务启用失败，机器人将显示数据库中的已有统计"
-                                fi
-                            else
-                                tg_set_config "user_bot_enabled" "false"
-                            fi
-                        fi
+                        _enable_tg_user_bot
                     fi
                 fi
                 _pause
@@ -28688,7 +29191,11 @@ _configure_tg_notify() {
         echo -e "  流量检测: $cron_status"
         echo -e "  每日报告: $daily_status"
         echo -e "  用户查询机器人: $user_bot_status"
-        echo -e "  Bot Token: ${bot_token:+${G}已配置${NC}}${bot_token:-${D}未配置${NC}}"
+        if [[ -n "$bot_token" ]]; then
+            echo -e "  Bot Token: ${G}已配置（已隐藏）${NC}"
+        else
+            echo -e "  Bot Token: ${D}未配置${NC}"
+        fi
         echo -e "  Chat ID: ${chat_id:+${G}$chat_id${NC}}${chat_id:-${D}未配置${NC}}"
         echo -e "  服务器名: ${server_name:+${G}$server_name${NC}}${server_name:-${D}未设置${NC}}"
         _line
@@ -30171,6 +30678,8 @@ main_menu() {
 
     # 兼容旧定时规则：补齐 cron PATH，并确认守护进程确实运行。
     repair_scheduled_jobs
+    _refresh_watchdog_script 2>/dev/null || true
+    show_ip_change_notice
 
     # 初始化版本缓存目录
     _init_version_cache
@@ -30497,8 +31006,12 @@ _snell_apply_users() {
         else
             local prepare_status=$?
             [[ "$prepare_status" == 2 ]] || { _err "用户 $id 计数规则准备失败"; return 1; }
-            svc stop "$service" || true
-            svc disable "$service" || true
+            svc stop "$service" || failed=1
+            svc disable "$service" || failed=1
+            if svc status "$service"; then
+                _err "Snell 用户实例未停止: $service"
+                failed=1
+            fi
         fi
     done <<< "$(_snell_rows "$proto")"
     return "$failed"
@@ -30551,8 +31064,11 @@ _snell_sync_traffic() {
             quota=$(jq -r '.users[0].quota // 0' <<< "$row")
             enabled=$(jq -r '.users[0].enabled' <<< "$row")
             expire=$(jq -r '.users[0].expire_date // ""' <<< "$row")
-            if [[ "$enabled" == true ]] && { (( quota > 0 && used >= quota )) || [[ -n "$expire" && "$expire" < "$(date +%F)" ]]; }; then
-                db_set_user_enabled xray "$proto" "$name" false || return 1
+            if { (( quota > 0 && used >= quota )) || [[ -n "$expire" && "$expire" < "$(date +%F)" ]]; }; then
+                local stop_reason=quota
+                [[ -n "$expire" && "$expire" < "$(date +%F)" ]] && stop_reason=expired
+                db_set_user_enabled xray "$proto" "$name" false "$stop_reason" || return 1
+                [[ "$enabled" == true ]] || continue
                 if (( quota > 0 && used >= quota )); then
                     tg_send_over_quota "$name" "$proto" "$used" "$quota" xray
                 else
@@ -30859,6 +31375,37 @@ case "${1:-}" in
         echo "完成。日志: $CFG/expire.log"
         exit 0
         ;;
+    --check-ip)
+        # 检测公网 IP 变化并刷新节点文件（由 cron 每 30 分钟调用）
+        check_root
+        case "${2:-}" in
+            off)
+                touch "$CFG/ip-check.disabled"
+                remove_ip_check_cron
+                echo "已关闭公网 IP 自动检测"
+                exit 0
+                ;;
+            on)
+                rm -f "$CFG/ip-check.disabled"
+                if setup_ip_check_cron; then
+                    echo "已开启公网 IP 自动检测（每 30 分钟）"
+                    exit 0
+                fi
+                echo "定时任务写入失败"
+                exit 1
+                ;;
+            "") ;;
+            *) echo "用法: $0 --check-ip [on|off]"; exit 1 ;;
+        esac
+        init_db
+        if [[ -f "$CFG/ip-check.disabled" ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] 公网 IP 自动检测已关闭"
+            exit 0
+        fi
+        changes=$(check_public_ip_change) || { echo "[$(date '+%Y-%m-%d %H:%M:%S')] 公网 IP 变更处理失败"; exit 1; }
+        [[ -n "$changes" ]] && printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$changes"
+        exit 0
+        ;;
     --setup-expire-cron)
         # 安装过期检查定时任务
         check_root
@@ -30875,6 +31422,7 @@ case "${1:-}" in
         echo "  --tg-bot-poll        处理 Telegram 用户机器人消息 (用于定时任务)"
         echo "  --check-expire       检查并禁用过期用户 (用于定时任务)"
         echo "  --setup-expire-cron  安装过期检查定时任务"
+        echo "  --check-ip [on|off]  检测公网 IP 变化并刷新节点文件 (用于定时任务)；on/off 开关自动检测"
         echo "  --help, -h           显示帮助信息"
         echo ""
         echo "无参数时启动交互式菜单"
