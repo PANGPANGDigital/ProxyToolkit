@@ -1,5 +1,5 @@
 #!name=YouTube Enhance
-#!desc=YouTube & YouTube Music：后台播放、画中画、入口控制与字幕翻译（不使用远程 Worker）
+#!desc=YouTube & YouTube Music：后台播放、画中画、入口控制与字幕翻译
 #!arguments=屏蔽上传按钮:true,屏蔽选段按钮:true,屏蔽Shorts按钮:false,字幕翻译语言:off,启用调试模式:false
 #!arguments-desc=- 按钮参数：[true, false]；翻译语言填写 Google Translate 语言代码，off 表示关闭\n- 启用调试模式后输出更多日志
 #!system=ios
