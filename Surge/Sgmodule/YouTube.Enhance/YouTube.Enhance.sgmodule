@@ -1,5 +1,7 @@
 #!name=YouTube Enhance
-#!desc=为 YouTube & YouTube Music 启用后台播放和画中画（PiP）功能（无去广告纯净版）
+#!desc=YouTube & YouTube Music：后台播放、画中画、入口控制与字幕翻译（不使用远程 Worker）
+#!arguments=屏蔽上传按钮:true,屏蔽选段按钮:true,屏蔽Shorts按钮:false,字幕翻译语言:off,启用调试模式:false
+#!arguments-desc=- 按钮参数：[true, false]；翻译语言填写 Google Translate 语言代码，off 表示关闭\n- 启用调试模式后输出更多日志
 #!system=ios
 
 [Rule]
@@ -7,8 +9,8 @@ AND,((DOMAIN-SUFFIX,googlevideo.com), (PROTOCOL,UDP)),REJECT-NO-DROP
 AND,((DOMAIN,youtubei.googleapis.com), (PROTOCOL,UDP)),REJECT-NO-DROP
 
 [Script]
-# 仅拦截与画中画、后台播放相关的核心接口（player / get_watch / account/get_setting）
-youtube.response = type=http-response,pattern=^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(player|get_watch|account\/get_setting)(\?.*)?$,requires-body=1,max-size=-1,binary-body-mode=1,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/YouTube.Enhance/youtube.js
+# guide 提供入口控制；player / get_watch 提供字幕翻译、画中画和后台播放能力
+youtube.response = type=http-response,pattern=^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(player|get_watch|account\/get_setting|guide)(\?.*)?$,requires-body=1,max-size=-1,binary-body-mode=1,script-path=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/YouTube.Enhance/youtube.js,argument="{"captionLang":"{{{字幕翻译语言}}}","blockUpload":{{{屏蔽上传按钮}}},"blockImmersive":{{{屏蔽选段按钮}}},"blockShorts":{{{屏蔽Shorts按钮}}},"debug":{{{启用调试模式}}}}"
 
 [MITM]
 # 移除了 *.googlevideo.com，彻底避免视频流握手失败和断流
