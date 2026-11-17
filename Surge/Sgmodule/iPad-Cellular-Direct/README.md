@@ -20,10 +20,6 @@ Surge 官方资料说明：已安装模块可在 iOS 设备间通过 iCloud 同�
 - 连接 Wi-Fi 时，这条蜂窝网络规则不匹配；相关请求继续由当前配置中的其他规则处理。
 - 模块只包含这一条规则，不修改域名、DNS 或其他代理策略。
 
-## 模块文件
-
-[查看模块源码](./iPad-Cellular-Direct.sgmodule) · [Raw 模块链接](https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Sgmodule/iPad-Cellular-Direct/iPad-Cellular-Direct.sgmodule)
-
 ## 参考
 
 - [Surge 规则手册：Protocol and Network Rules](https://manual.nssurge.com/rules/protocol-and-network.html)
