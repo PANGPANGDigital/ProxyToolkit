@@ -1,0 +1,6 @@
+#!name=iPad 蜂窝网络直连
+#!desc=仅在 iPad 当前使用蜂窝网络时将匹配流量直连
+#!system=ios
+
+[Rule]
+SUBNET,TYPE:CELLULAR,DIRECT
