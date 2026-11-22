@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.6] - 2026-11
+
+**Added & Fixed**
+
+- **Xray 多 VLESS 入站独立性重构**：修复增删 VLESS-Reality 或 VLESS-XHTTP 用户/修改配额后，原有 VLESS+Reality+XHTTP 和 VLESS-WS 连接失败的问题；用户变更一律由完整生成器重建，不再按 protocol 覆盖写入 clients 和 vision flow。
+- **Release 资产校验回退**：GitHub API 限流或不可达时，自动从发布页拉取随附的 `.dgst`、`.sha256` 文件完成 SHA-256 校验；区分“取不到校验值”与“校验不一致”提示。
+- **Surge VLESS 协议支持**：
+  - VLESS-Reality、VLESS-XHTTP、VLESS-XHTTP-CDN 节点信息输出 Surge 节点配置（需 Surge iOS 6.0.0+ / Mac 6.12.0+）。
+  - 生成的 Surge 订阅自动写入以上三种 VLESS 节点并加入 `Proxy` 策略组。
+  - XHTTP 提示更新为“Loon 暂不支持 XHTTP，请使用 Surge 或分享链接导入 Shadowrocket”。
+
 ## [3.7.5] - 2026-11
 
 **Added & Fixed**

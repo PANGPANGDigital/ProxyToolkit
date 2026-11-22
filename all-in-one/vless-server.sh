@@ -34,7 +34,7 @@ fi
 #  作者地址:https://docs.vaiox.de/
 #═══════════════════════════════════════════════════════════════════════════════
 
-readonly VERSION="3.7.5"
+readonly VERSION="3.7.6"
 readonly AUTHOR="Zyx0rx"
 readonly REPO_URL="https://github.com/PANGPANGDigital/ProxyToolkit"
 readonly SCRIPT_REPO="PANGPANGDigital/ProxyToolkit"
@@ -7512,6 +7512,23 @@ gen_snell_link() {
     printf '%s\n' "snell://${psk}@${ip}:${port}?${query}#${name}"
 }
 
+# 生成 Surge VLESS 节点行（Surge iOS 6.0.0+ / Mac 6.12.0+）。
+# 有公钥时为 REALITY，否则为 TLS；有 XHTTP 路径时走 XHTTP，否则为 RAW+Vision。
+gen_vless_surge_line() {
+    local name="$1" host="$2" port="$3" uuid="$4" sni="$5" pbk="$6" sid="$7" xhttp_path="${8:-}"
+    local line="$name = vless, $host, $port, username=$uuid"
+    [[ -z "$xhttp_path" ]] && line+=", flow=xtls-rprx-vision"
+    line+=", sni=$sni"
+    if [[ -n "$pbk" ]]; then
+        line+=", reality-public-key=$pbk"
+        [[ -n "$sid" ]] && line+=", reality-short-id=$sid"
+    else
+        line+=", tls=true"
+    fi
+    [[ -n "$xhttp_path" ]] && line+=", xhttp=true, xhttp-path=$xhttp_path"
+    printf '%s\n' "$line"
+}
+
 # 生成 Surge Snell 节点行。Snell v6 的 mode 属于协议握手参数，必须与
 # 服务端配置完全一致；v4/v5 不输出该字段。
 gen_snell_surge_line() {
@@ -9716,12 +9733,30 @@ _pinned_github_asset_sha256() {
     esac
 }
 
-# 使用 GitHub Release API 提供的 digest；旧发布缺少 digest 时尝试其 checksum 资产。
+# 读取发布页随附的单文件校验（Xray 的 .dgst、常见的 .sha256）。走 github.com 下载地址，不占 API 配额。
+_github_sidecar_sha256() {
+    local asset_url="${1%%\?*}" ext checksum_file expected=""
+    checksum_file=$(mktemp "${TMPDIR:-/tmp}/vless-sidecar.XXXXXX") || return 1
+    for ext in dgst sha256 sha256sum; do
+        curl -fsSL --connect-timeout 10 --max-time 30 -o "$checksum_file" "${asset_url}.${ext}" 2>/dev/null || continue
+        # 只取恰好 64 位的十六进制字段；.dgst 中的 MD5/SHA1/SHA512 长度不同，不会误取。
+        expected=$(awk '{
+            for (i=1; i<=NF; i++) if (length($i) == 64 && $i !~ /[^0-9a-fA-F]/) { print tolower($i); exit }
+        }' "$checksum_file")
+        [[ -n "$expected" ]] && break
+    done
+    rm -f "$checksum_file"
+    [[ -n "$expected" ]] && printf '%s\n' "$expected"
+}
+
+# 使用 GitHub Release API 提供的 digest；旧发布缺少 digest 时尝试其 checksum 资产；
+# API 限流或不可达时改用发布页随附的校验文件。
+# 返回 0 校验通过，1 校验值不一致，2 取不到发布方校验值。
 _verify_github_release_asset() {
     local repo="$1" version="$2" asset_url="$3" file="$4"
     local asset_name="${asset_url%%\?*}"
     asset_name="${asset_name##*/}"
-    local release_json digest expected actual checksum_url checksum_file
+    local release_json="" digest expected actual checksum_url checksum_file
 
     # 固定资产不依赖 GitHub API 是否返回 digest，也避免 API 限流导致误报。
     expected=$(_pinned_github_asset_sha256 "$repo" "$version" "$asset_name" 2>/dev/null || true)
@@ -9730,8 +9765,11 @@ _verify_github_release_asset() {
         release_json=$(curl -fsSL --connect-timeout 10 --max-time 30 \
             "https://api.github.com/repos/${repo}/releases/tags/v${version}" 2>/dev/null) ||
         release_json=$(curl -fsSL --connect-timeout 10 --max-time 30 \
-            "https://api.github.com/repos/${repo}/releases/tags/${version}" 2>/dev/null) || return 1
+            "https://api.github.com/repos/${repo}/releases/tags/${version}" 2>/dev/null) ||
+        release_json=""
+    fi
 
+    if [[ -z "$expected" && -n "$release_json" ]]; then
         digest=$(printf '%s' "$release_json" | jq -r --arg n "$asset_name" \
             '[.assets[]? | select(.name == $n) | .digest // empty][0] // empty' 2>/dev/null)
         if [[ "$digest" == sha256:* ]]; then
@@ -9740,25 +9778,26 @@ _verify_github_release_asset() {
             checksum_url=$(printf '%s' "$release_json" | jq -r '
                 [.assets[]? | select(.name | test("sha256|checksums?"; "i")) | .browser_download_url][0] // empty
             ' 2>/dev/null)
-            [[ -n "$checksum_url" ]] || return 1
-            checksum_file=$(mktemp "${TMPDIR:-/tmp}/vless-checksum.XXXXXX") || return 1
-            if ! curl -fsSL --connect-timeout 10 --max-time 30 -o "$checksum_file" "$checksum_url"; then
+            if [[ -n "$checksum_url" ]] && checksum_file=$(mktemp "${TMPDIR:-/tmp}/vless-checksum.XXXXXX"); then
+                if curl -fsSL --connect-timeout 10 --max-time 30 -o "$checksum_file" "$checksum_url"; then
+                    expected=$(awk -v name="$asset_name" '
+                        index($0, name) {
+                            for (i=1; i<=NF; i++) if ($i ~ /^[0-9a-fA-F]{64}$/) { print tolower($i); exit }
+                        }
+                    ' "$checksum_file")
+                fi
                 rm -f "$checksum_file"
-                return 1
             fi
-            expected=$(awk -v name="$asset_name" '
-                index($0, name) {
-                    for (i=1; i<=NF; i++) if ($i ~ /^[0-9a-fA-F]{64}$/) { print tolower($i); exit }
-                }
-            ' "$checksum_file")
-            rm -f "$checksum_file"
         fi
     fi
+
+    [[ -n "$expected" ]] || expected=$(_github_sidecar_sha256 "$asset_url")
+    [[ -n "$expected" ]] || return 2
 
     actual=$(_sha256_file "$file")
     actual=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
     expected=$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')
-    [[ -n "$expected" && -n "$actual" && "$actual" == "$expected" ]]
+    [[ -n "$actual" && "$actual" == "$expected" ]]
 }
 
 _verify_direct_download() {
@@ -9867,11 +9906,19 @@ _install_binary() {
         return 1
     fi
 
-    if ! _verify_github_release_asset "$repo" "$version" "$url" "$tmp/pkg"; then
+    local verify_rc=0
+    _verify_github_release_asset "$repo" "$version" "$url" "$tmp/pkg" || verify_rc=$?
+    if [[ "$verify_rc" != 0 ]]; then
         if [[ "${ALLOW_UNVERIFIED_DOWNLOADS:-0}" != "1" ]]; then
             rm -rf "$tmp"
-            _err "$name 下载包无法通过发布方 SHA-256 校验，已拒绝安装"
-            _warn "仅在你已自行核验来源时，才可临时设置 ALLOW_UNVERIFIED_DOWNLOADS=1"
+            if [[ "$verify_rc" == 2 ]]; then
+                _err "$name 无法获取发布方 SHA-256 校验值，已拒绝安装"
+                _warn "可能是 GitHub API 限流（未登录每小时 60 次）或无法访问 GitHub，请稍后重试"
+                _warn "仅在你已自行核验来源时，才可临时设置 ALLOW_UNVERIFIED_DOWNLOADS=1"
+            else
+                _err "$name 下载包与发布方 SHA-256 不一致，已拒绝安装"
+                _warn "可能是下载不完整或被篡改，请重试；仍不一致时不要跳过校验"
+            fi
             return 1
         fi
         _warn "已按显式设置跳过 $name 的完整性校验"
@@ -20655,6 +20702,9 @@ show_single_protocol_info() {
                 echo -e "  公钥: ${G}$public_key${NC}"
                 echo -e "  SNI: ${G}$sni${NC}  ShortID: ${G}$short_id${NC}"
                 echo ""
+                echo -e "  ${Y}Surge 配置 (iOS 6.0.0+ / Mac 6.12.0+):${NC}"
+                echo -e "  ${C}$(gen_vless_surge_line "${country_code}-Vless-Reality" "$config_ip" "$display_port" "$uuid" "$sni" "$public_key" "$short_id")${NC}"
+                echo ""
                 echo -e "  ${Y}Loon 配置:${NC}"
                 echo -e "  ${C}${country_code}-Vless-Reality = VLESS, ${config_ip}, ${display_port}, \"${uuid}\", transport=tcp, flow=xtls-rprx-vision, public-key=\"${public_key}\", short-id=${short_id}, udp=true, over-tls=true, sni=${sni}${NC}"
             fi
@@ -20665,7 +20715,10 @@ show_single_protocol_info() {
             echo -e "  SNI: ${G}$sni${NC}  ShortID: ${G}$short_id${NC}"
             echo -e "  Path: ${G}$path${NC}"
             echo ""
-            echo -e "  ${D}注: Loon/Surge 暂不支持 XHTTP 传输，请使用分享链接导入 Shadowrocket${NC}"
+            echo -e "  ${Y}Surge 配置 (iOS 6.0.0+ / Mac 6.12.0+):${NC}"
+            echo -e "  ${C}$(gen_vless_surge_line "${country_code}-Vless-XHTTP" "$config_ip" "$display_port" "$uuid" "$sni" "$public_key" "$short_id" "${path:-/}")${NC}"
+            echo ""
+            echo -e "  ${D}注: Loon 暂不支持 XHTTP 传输，请使用 Surge 或分享链接导入 Shadowrocket${NC}"
             ;;
         vless-xhttp-cdn)
             local domain=$(echo "$cfg" | jq -r '.domain // empty')
@@ -20678,7 +20731,10 @@ show_single_protocol_info() {
             echo -e "  ${Y}客户端配置:${NC}"
             echo -e "  ${C}地址=${domain}, 端口=443, TLS=开启${NC}"
             echo ""
-            echo -e "  ${D}注: Loon/Surge 暂不支持 XHTTP 传输，请使用分享链接导入 Shadowrocket${NC}"
+            echo -e "  ${Y}Surge 配置 (iOS 6.0.0+ / Mac 6.12.0+):${NC}"
+            echo -e "  ${C}$(gen_vless_surge_line "${country_code}-Vless-XHTTP-CDN" "$domain" 443 "$uuid" "$domain" "" "" "${path:-/}")${NC}"
+            echo ""
+            echo -e "  ${D}注: Loon 暂不支持 XHTTP 传输，请使用 Surge 或分享链接导入 Shadowrocket${NC}"
             ;;
         vless-vision)
             echo -e "  UUID: ${G}$uuid${NC}"
@@ -25485,11 +25541,30 @@ gen_surge_sub() {
             local version=$(echo "$cfg" | jq -r '.version // empty')
             local snell_mode=$(echo "$cfg" | jq -r '.mode // "default"')
             local snell_tfo=$(echo "$cfg" | jq -r '.tfo // "true"')
+            local public_key=$(echo "$cfg" | jq -r '.public_key // empty')
+            local short_id=$(echo "$cfg" | jq -r '.short_id // empty')
+            local path=$(echo "$cfg" | jq -r '.path // empty')
+            local domain=$(echo "$cfg" | jq -r '.domain // empty')
+            local security_mode=$(echo "$cfg" | jq -r '.security_mode // "reality"')
             
             local name="${country_code}-$(get_protocol_name $protocol)-${ip_suffix}"
             local proxy=""
             
             case "$protocol" in
+                vless)
+                    # VLESS+Encryption 模式没有 REALITY 公钥，不生成 REALITY 节点。
+                    [[ -n "$server_ip" && "$security_mode" != "encryption" ]] &&
+                        proxy=$(gen_vless_surge_line "$name" "$server_ip" "$port" "$uuid" "$sni" "$public_key" "$short_id")
+                    ;;
+                vless-xhttp)
+                    [[ -n "$server_ip" ]] &&
+                        proxy=$(gen_vless_surge_line "$name" "$server_ip" "$port" "$uuid" "$sni" "$public_key" "$short_id" "${path:-/}")
+                    ;;
+                vless-xhttp-cdn)
+                    # 经 CDN 和本机 Nginx TLS 接入，地址为域名、端口固定 443。
+                    [[ -n "$domain" ]] &&
+                        proxy=$(gen_vless_surge_line "$name" "$domain" 443 "$uuid" "$domain" "" "" "${path:-/}")
+                    ;;
                 trojan)
                     [[ -n "$server_ip" ]] && proxy="$name = trojan, $server_ip, $port, password=$password, sni=$sni, skip-cert-verify=true"
                     ;;
@@ -28649,11 +28724,6 @@ _set_user_expire_date() {
 # 更新 Xray/Sing-box 配置文件中的用户列表、用户级路由规则、链式代理和负载均衡并重载服务
 _regenerate_config() {
     local core="$1" proto="$2"
-    if [[ "$core" == "xray" && "$proto" == "ss-legacy" ]]; then
-        # SS 必须使用完整生成器，不能落入下面 VLESS clients 的局部更新。
-        rebuild_and_reload_xray
-        return $?
-    fi
     if _snell_managed "$proto"; then
         # Snell 数据库操作已处理对应实例，不能顺便启动其他手动停止的用户。
         return 0
@@ -28683,237 +28753,13 @@ _regenerate_config() {
         return 0
     fi
     
-    # 确定配置文件路径和服务名称
+    # Xray 同样使用完整生成器。Reality、XHTTP、WS 等多个 VLESS 入站各有自己的用户和 flow，
+    # 按 protocol 局部改写 clients 会把当前协议的用户覆盖到所有 VLESS 入站上。
     if [[ "$core" == "xray" ]]; then
-        config_file="$CFG/config.json"
-        service_name="vless-reality"
+        rebuild_and_reload_xray
+        return $?
     fi
-    
-    # 检查配置文件是否存在
-    if [[ ! -f "$config_file" ]]; then
-        _info "用户信息已保存到数据库"
-        return 0
-    fi
-    
-    # 从数据库读取用户列表
-    local db_users=$(db_get_field "$core" "$proto" "users")
-    local users_json=""
-    local xray_user_rules="[]"
-    local xray_balancer_rules="[]"
-    local needed_chain_nodes=""
-    local needed_balancer_groups=""
-    
-    if [[ -n "$db_users" && "$db_users" != "null" ]]; then
-        # 有用户列表，转换为 Xray 格式的 clients 数组
-        # email 格式为 用户名@协议，用于流量统计
-        users_json=$(echo "$db_users" | jq -c --arg proto "$proto" '[.[] | select(.enabled == true) | {id: .uuid, email: (.name + "@" + $proto), flow: "xtls-rprx-vision"}]' 2>/dev/null)
-        
-        # 生成用户级路由规则
-        while IFS= read -r line; do
-            [[ -z "$line" ]] && continue
-            local user_name=$(echo "$line" | jq -r '.name')
-            local user_routing=$(echo "$line" | jq -r '.routing // ""')
-            
-            [[ -z "$user_name" || -z "$user_routing" ]] && continue
-            
-            # user 字段需要匹配 clients 中的 email 格式：用户名@协议
-            local user_email="${user_name}@${proto}"
-            
-            case "$user_routing" in
-                direct)
-                    xray_user_rules=$(echo "$xray_user_rules" | jq --arg user "$user_email" \
-                        '. + [{"type": "field", "user": [$user], "outboundTag": "direct"}]')
-                    ;;
-                warp)
-                    xray_user_rules=$(echo "$xray_user_rules" | jq --arg user "$user_email" \
-                        '. + [{"type": "field", "user": [$user], "outboundTag": "warp"}]')
-                    ;;
-                chain:*)
-                    local node_name="${user_routing#chain:}"
-                    xray_user_rules=$(echo "$xray_user_rules" | jq --arg user "$user_email" --arg tag "chain-${node_name}-prefer-ipv4" \
-                        '. + [{"type": "field", "user": [$user], "outboundTag": $tag}]')
-                    needed_chain_nodes="$needed_chain_nodes $node_name"
-                    ;;
-                balancer:*)
-                    local group_name="${user_routing#balancer:}"
-                    # 负载均衡使用 balancerTag 而不是 outboundTag
-                    xray_balancer_rules=$(echo "$xray_balancer_rules" | jq --arg user "$user_email" --arg tag "$group_name" \
-                        '. + [{"type": "field", "user": [$user], "balancerTag": $tag}]')
-                    needed_balancer_groups="$needed_balancer_groups $group_name"
-                    ;;
-            esac
-        done < <(echo "$db_users" | jq -c '.[] | select(.enabled == true and .routing != null and .routing != "")')
-    else
-        # 使用默认 UUID
-        local default_uuid=$(db_get_field "$core" "$proto" "uuid")
-        if [[ -n "$default_uuid" ]]; then
-            users_json="[{\"id\": \"$default_uuid\", \"email\": \"default@${proto}\", \"flow\": \"xtls-rprx-vision\"}]"
-        fi
-    fi
-    
-    # 从数据库读取链式代理节点配置
-    local chain_outbounds="[]"
-    if [[ -n "$needed_chain_nodes" && -f "$DB_FILE" ]]; then
-        for node_name in $needed_chain_nodes; do
-            local node_config=$(jq -r --arg n "$node_name" '.chain_proxy.nodes[] | select(.name == $n)' "$DB_FILE" 2>/dev/null)
-            if [[ -n "$node_config" ]]; then
-                local node_type=$(echo "$node_config" | jq -r '.type')
-                local server=$(echo "$node_config" | jq -r '.server')
-                local port=$(echo "$node_config" | jq -r '.port')
-                local username=$(echo "$node_config" | jq -r '.username // ""')
-                local password=$(echo "$node_config" | jq -r '.password // ""')
-                
-                if [[ "$node_type" == "socks" ]]; then
-                    local outbound="{\"tag\": \"chain-${node_name}-prefer-ipv4\", \"protocol\": \"socks\", \"settings\": {\"servers\": [{\"address\": \"$server\", \"port\": $port"
-                    if [[ -n "$username" && -n "$password" ]]; then
-                        outbound="$outbound, \"users\": [{\"user\": \"$username\", \"pass\": \"$password\"}]"
-                    fi
-                    outbound="$outbound}]}}"
-                    chain_outbounds=$(echo "$chain_outbounds" | jq --argjson ob "$outbound" '. + [$ob]')
-                fi
-            fi
-        done
-    fi
-    
-    # 从数据库读取负载均衡组配置
-    local xray_balancers="[]"
-    if [[ -n "$needed_balancer_groups" && -f "$DB_FILE" ]]; then
-        for group_name in $needed_balancer_groups; do
-            local group_config=$(jq -r --arg n "$group_name" '.balancer_groups[] | select(.name == $n)' "$DB_FILE" 2>/dev/null)
-            if [[ -n "$group_config" ]]; then
-                local strategy=$(echo "$group_config" | jq -r '.strategy // "random"')
-                local nodes=$(echo "$group_config" | jq -r '.nodes[]' 2>/dev/null)
-                
-                # 构建 selector 列表（每个节点对应一个 outbound tag）
-                local selectors="[]"
-                for node in $nodes; do
-                    selectors=$(echo "$selectors" | jq --arg s "proxy-${node}" '. + [$s]')
-                    # 确保这些节点也被添加到 chain_outbounds
-                    needed_chain_nodes="$needed_chain_nodes $node"
-                done
-                
-                # 构建 balancer
-                local balancer="{\"tag\": \"$group_name\", \"selector\": $selectors, \"strategy\": {\"type\": \"$strategy\"}}"
-                xray_balancers=$(echo "$xray_balancers" | jq --argjson b "$balancer" '. + [$b]')
-            fi
-        done
-        
-        # 重新生成需要的链式代理节点 outbounds
-        chain_outbounds="[]"
-        for node_name in $needed_chain_nodes; do
-            # 检查是否已添加
-            local exists=$(echo "$chain_outbounds" | jq --arg t "chain-${node_name}-prefer-ipv4" '[.[] | select(.tag == $t)] | length')
-            [[ "$exists" != "0" ]] && continue
-            
-            local node_config=$(jq -r --arg n "$node_name" '.chain_proxy.nodes[] | select(.name == $n)' "$DB_FILE" 2>/dev/null)
-            if [[ -n "$node_config" ]]; then
-                local node_type=$(echo "$node_config" | jq -r '.type')
-                local server=$(echo "$node_config" | jq -r '.server')
-                local port=$(echo "$node_config" | jq -r '.port')
-                local username=$(echo "$node_config" | jq -r '.username // ""')
-                local password=$(echo "$node_config" | jq -r '.password // ""')
-                
-                if [[ "$node_type" == "socks" ]]; then
-                    local outbound="{\"tag\": \"chain-${node_name}-prefer-ipv4\", \"protocol\": \"socks\", \"settings\": {\"servers\": [{\"address\": \"$server\", \"port\": $port"
-                    if [[ -n "$username" && -n "$password" ]]; then
-                        outbound="$outbound, \"users\": [{\"user\": \"$username\", \"pass\": \"$password\"}]"
-                    fi
-                    outbound="$outbound}]}}"
-                    chain_outbounds=$(echo "$chain_outbounds" | jq --argjson ob "$outbound" '. + [$ob]')
-                fi
-            fi
-        done
-    fi
-    
-    # 合并 outboundTag 规则和 balancerTag 规则
-    local all_user_rules=$(echo "$xray_user_rules" | jq --argjson br "$xray_balancer_rules" '. + $br')
-    
-    # 更新配置文件
-    if [[ -n "$users_json" ]]; then
-        local tmp=$(mktemp)
-        
-        # 使用 jq 更新配置
-        if jq --argjson clients "$users_json" \
-              --argjson user_rules "$all_user_rules" \
-              --argjson chain_obs "$chain_outbounds" \
-              --argjson balancers "$xray_balancers" '
-            # 更新 clients (通过 protocol 查找 VLESS inbound，避免索引问题)
-            (.inbounds[] | select(.protocol == "vless")).settings.clients = $clients |
-            
-            # 确保 routing 结构存在
-            if .routing == null then .routing = {"domainStrategy": "AsIs", "rules": []} else . end |
-            if .routing.rules == null then .routing.rules = [] else . end |
-            
-            # 确保 api 和 stats 存在（用于流量统计）
-            if .api == null then .api = {"tag": "api", "services": ["StatsService"]} else . end |
-            if .stats == null then .stats = {} else . end |
-            if .policy == null then .policy = {"system": {"statsInboundUplink": true, "statsInboundDownlink": true}, "levels": {"0": {"statsUserUplink": true, "statsUserDownlink": true}}} else . end |
-            if .policy.system == null then .policy.system = {"statsInboundUplink": true, "statsInboundDownlink": true} else . end |
-            if .policy.levels == null then .policy.levels = {"0": {"statsUserUplink": true, "statsUserDownlink": true}} else . end |
-            if .policy.levels["0"] == null then .policy.levels["0"] = {"statsUserUplink": true, "statsUserDownlink": true} else . end |
-            .policy.system.statsInboundUplink = true |
-            .policy.system.statsInboundDownlink = true |
-            .policy.levels["0"].statsUserUplink = true |
-            .policy.levels["0"].statsUserDownlink = true |
-            
-            # 确保有 API inbound（监听 127.0.0.1:10085）
-            if ([.inbounds[] | select(.tag == "api")] | length) == 0 then
-                .inbounds += [{"tag": "api", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door", "settings": {"address": "127.0.0.1"}}]
-            else . end |
-            
-            # 确保有 API outbound
-            if ([.outbounds[] | select(.tag == "api")] | length) == 0 then
-                .outbounds += [{"tag": "api", "protocol": "blackhole", "settings": {}}]
-            else . end |
-            
-            # 添加链式代理 outbounds（先移除旧的 proxy-* outbounds）
-            .outbounds = ([.outbounds[] | select(.tag | startswith("proxy-") | not)] + $chain_obs) |
-            
-            # 添加/更新负载均衡器
-            if ($balancers | length) > 0 then
-                .routing.balancers = $balancers
-            else . end |
-            
-            # 确保 routing 中有 API 规则
-            if ([.routing.rules[]? | select(.inboundTag != null and (.inboundTag | contains(["api"])))] | length) == 0 then
-                .routing.rules = [{"type": "field", "inboundTag": ["api"], "outboundTag": "api"}] + (.routing.rules // [])
-            else . end |
-            
-            # 更新用户级路由规则
-            # 用户级规则优先于全局规则：API规则 > 用户规则 > 其他规则
-            .routing.rules = (
-                # 1. API 规则必须在最前
-                [.routing.rules[]? | select(.inboundTag != null and (.inboundTag | contains(["api"])))] +
-                # 2. 用户级路由规则（高优先级）
-                $user_rules +
-                # 3. 其他规则（全局规则等）
-                [.routing.rules[]? | select(
-                    (.user == null or (.user | type) != "array") and
-                    (.inboundTag == null or (.inboundTag | contains(["api"])) | not)
-                )]
-            )
-        ' "$config_file" > "$tmp" 2>/dev/null; then
-            mv "$tmp" "$config_file"
-        else
-            rm -f "$tmp"
-            # 如果完整更新失败，至少尝试更新 clients
-            tmp=$(mktemp)
-            if jq --argjson clients "$users_json" '(.inbounds[] | select(.protocol == "vless")).settings.clients = $clients' "$config_file" > "$tmp" 2>/dev/null; then
-                mv "$tmp" "$config_file"
-            else
-                rm -f "$tmp"
-            fi
-        fi
-    fi
-    
     _info "用户信息已保存到数据库"
-    
-    # 重载服务使配置生效
-    if [[ "$DISTRO" == "alpine" ]]; then
-        rc-service "$service_name" restart 2>/dev/null || true
-    elif systemctl is-active --quiet "$service_name" 2>/dev/null; then
-        systemctl reload "$service_name" 2>/dev/null || systemctl restart "$service_name" 2>/dev/null
-    fi
 }
 
 # 选择可绑定 Telegram 的受管用户；只有数据库 users 数组中的账号可绑定。
