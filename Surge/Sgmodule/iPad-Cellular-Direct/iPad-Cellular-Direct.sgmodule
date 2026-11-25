@@ -1,6 +1,9 @@
 #!name=iPad 蜂窝网络直连
-#!desc=仅在 iPad 当前使用蜂窝网络时将匹配流量直连
+#!desc=仅在 iPad 当前使用蜂窝网络时将匹配流量直连，并切换为防污染 DNS
 #!system=ios
 
 [Rule]
 SUBNET,TYPE:CELLULAR,DIRECT
+
+[SSID Setting]
+TYPE:CELLULAR dns-server=system,1.1.1.1,8.8.8.8 encrypted-dns-server=https://cloudflare-dns.com/dns-query,https://dns.google/dns-query
