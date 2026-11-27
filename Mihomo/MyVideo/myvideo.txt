@@ -1,2 +1,3 @@
 +.myvideo.net.tw
 +.taiwanmobile.com
+cdn.plyr.io

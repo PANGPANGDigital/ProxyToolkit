@@ -6,8 +6,9 @@
 
 | 类型 | 数量（条） | 说明 |
 | --- | --- | --- |
+| `DOMAIN` | 1 | `cdn.plyr.io`（Plyr 播放器静态资源 CDN） |
 | `DOMAIN-SUFFIX` | 2 | `myvideo.net.tw`（主站、播放及静态资源）与 `taiwanmobile.com`（账号登录及关联接口） |
-| **TOTAL** | **2** | 精准匹配 MyVideo 影音流量 |
+| **TOTAL** | **3** | 精准匹配 MyVideo 影音及播放器流量 |
 
 ## 使用方法
 

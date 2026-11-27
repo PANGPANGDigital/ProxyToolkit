@@ -6,7 +6,7 @@
 
 | 文件 | 类型 (`behavior`) | 说明 |
 | --- | --- | --- |
-| `myvideo.mrs` | `domain` | 匹配 `+.myvideo.net.tw`（主站、播放及静态资源）与 `+.taiwanmobile.com`（台湾大哥大账号认证及关联接口） |
+| `myvideo.mrs` | `domain` | 匹配 `+.myvideo.net.tw`（主站、播放及静态资源）、`+.taiwanmobile.com`（台湾大哥大账号认证及关联接口）及 `cdn.plyr.io`（Plyr 播放器静态资源 CDN） |
 | `myvideo.txt` | 明文源文件 | 用于查看规则明细与重新编译 `.mrs` |
 
 ## 使用方法
