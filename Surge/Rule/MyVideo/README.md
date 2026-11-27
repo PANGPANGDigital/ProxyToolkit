@@ -23,7 +23,7 @@ https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/Rule/M
 
 ```ini
 # 请将“台湾节点1, 台湾节点2”替换为配置中实际可用的台湾解锁节点或策略组
-TW-Media = select, 台湾节点1, 台湾节点2
+TW-Media = select, 台湾节点1, 台湾节点2, icon-url=https://raw.githubusercontent.com/PANGPANGDigital/ProxyToolkit/main/Surge/icon/images/MyVideo.png
 ```
 
 #### `[Rule]`（务必放在 `FINAL` 或通用 `GEOIP` 规则之前）
