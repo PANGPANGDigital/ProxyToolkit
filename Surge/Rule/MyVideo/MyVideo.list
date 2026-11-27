@@ -1,0 +1,8 @@
+# NAME: MyVideo
+# DESCRIPTION: MyVideo (Taiwan Mobile OTT) ruleset for Surge
+
+# > MyVideo 主站、播放及静态资源域名
+DOMAIN-SUFFIX,myvideo.net.tw
+
+# > 台湾大哥大（账号登录及关联接口校验）
+DOMAIN-SUFFIX,taiwanmobile.com
